@@ -8,6 +8,7 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import "fake-indexeddb/auto";
+import { IDBFactory } from "fake-indexeddb";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const EXT_DIR = join(ROOT, "extension");
@@ -1203,4 +1204,64 @@ test("tab facts prune only previously known closed document fingerprints",async(
  const next=callbacks.length;mock.listeners.onUpdatedTab[0]();callbacks[next]([]);await bg.port.truncationChain;
  assert.equal(Object.keys(bg.port.truncationByOrigin[origin].documents).length,0);
  assert.equal(bg.port.truncationByOrigin[origin].count,before+1);
+});
+
+async function startSafari(mock, idb) {
+  mock.chrome.runtime.getURL = (path) => `safari-web-extension://6f4d5042-ab48-42e5-a191-38327b4ea30b/${path}`;
+  const sandbox = createSandbox(mock, true);
+  sandbox.indexedDB = idb;
+  vm.runInNewContext(readExtFile("background.js"), sandbox);
+  await sandbox.SolstoneBackground.ensureInit();
+  return sandbox;
+}
+
+test("safari: clearing the extension's storage also forgets what its database kept", async () => {
+  const idb = new IDBFactory();
+  const mock = createMockChrome();
+  const first = await startSafari(mock, idb);
+  const inst = first.SolstoneBackground.port.inst;
+  assert.equal(mock.storageData.inst, inst);
+  await first.SolstoneDB.put("meta", 1, "consentVersion");
+  await first.SolstoneDB.put("outbox", { batchId: "b1", origin: "https://example.com" });
+
+  // The app is reinstalled: storage.local and the database both survive.
+  const again = await startSafari(mock, idb);
+  assert.equal(again.SolstoneBackground.port.inst, inst);
+  assert.equal(await again.SolstoneDB.get("meta", "consentVersion"), 1);
+
+  // Safari's Clear Storage empties storage.local only.
+  for (const key of Object.keys(mock.storageData)) delete mock.storageData[key];
+  const cleared = await startSafari(mock, idb);
+  assert.notEqual(cleared.SolstoneBackground.port.inst, inst);
+  assert.equal(mock.storageData.inst, cleared.SolstoneBackground.port.inst);
+  assert.equal(await cleared.SolstoneDB.get("meta", "consentVersion"), undefined);
+  assert.deepEqual(await cleared.SolstoneDB.getAll("outbox"), []);
+});
+
+test("safari: a running background starts over when its storage is cleared", async () => {
+  const mock = createMockChrome();
+  let changed = null;
+  let reloads = 0;
+  mock.chrome.storage.onChanged = { addListener: (fn) => { changed = fn; } };
+  mock.chrome.runtime.reload = () => { reloads++; };
+  await startSafari(mock, new IDBFactory());
+  changed({ cfg: { newValue: { paused: true } } }, "local");
+  changed({ inst: { oldValue: "x", newValue: "y" } }, "local");
+  assert.equal(reloads, 0);
+  changed({ inst: { oldValue: "x" } }, "local");
+  assert.equal(reloads, 1);
+});
+
+test("chrome: the database is not tied to a storage.local mirror", async () => {
+  const idb = new IDBFactory();
+  const mock = createMockChrome();
+  const sandbox = createSandbox(mock, true);
+  sandbox.indexedDB = idb;
+  vm.runInNewContext(readExtFile("background.js"), sandbox);
+  const port = await sandbox.SolstoneBackground.ensureInit();
+  assert.equal(mock.storageData.inst, undefined);
+  const again = createSandbox(mock, true);
+  again.indexedDB = idb;
+  vm.runInNewContext(readExtFile("background.js"), again);
+  assert.equal((await again.SolstoneBackground.ensureInit()).inst, port.inst);
 });

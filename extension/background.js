@@ -416,8 +416,22 @@ async function runReconcile() {
   return actions;
 }
 
+// Safari's "Clear Storage…" for the extension empties storage.local but keeps
+// its IndexedDB. The identifier is mirrored into storage.local, so a missing
+// mirror means the owner cleared it, and what the database kept goes too.
+async function forgetClearedSafariStorage() {
+  const kept = await DB.get("meta", "inst");
+  if (!kept) return;
+  const mirror = await chrome.storage.local.get("inst");
+  if (mirror.inst === kept) return;
+  for (const store of ["meta", "outbox", "producer"]) await DB.clear(store);
+}
+
 async function doInit() {
   await chrome.alarms.create(ALARM_NAME, { periodInMinutes: 1 });
+
+  const safari = globalThis.SolstoneSafariPort?.isSafari(chrome.runtime) === true;
+  if (safari) await forgetClearedSafariStorage();
 
   let inst = await DB.get("meta", "inst");
   if (!inst) {
@@ -426,6 +440,10 @@ async function doInit() {
     const newInst = Uuid.uuidv7String(Uuid.uuidv7Bytes(Date.now(), random));
     await DB.put("meta", newInst, "inst");
     inst = newInst;
+  }
+  if (safari) {
+    const mirror = await chrome.storage.local.get("inst");
+    if (mirror.inst !== inst) await chrome.storage.local.set({ inst });
   }
 
   const consentVersion = (await DB.get("meta", "consentVersion")) || 0;
@@ -677,6 +695,13 @@ chrome.runtime.onInstalled.addListener((details) => {
 });
 
 chrome.runtime.onStartup.addListener(init);
+
+// A clear while the background runs: start over, and doInit forgets the rest.
+chrome.storage.onChanged?.addListener((changes, area) => {
+  if (area !== "local" || !changes.inst || changes.inst.newValue !== undefined) return;
+  if (globalThis.SolstoneSafariPort?.isSafari(chrome.runtime) !== true) return;
+  try { chrome.runtime.reload(); } catch (_e) { /* the next start forgets it */ }
+});
 chrome.runtime.onUpdateAvailable?.addListener(() => {
   if (!port) return;
   port.updateCheck = "update-available";
