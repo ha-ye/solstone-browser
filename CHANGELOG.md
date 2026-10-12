@@ -6,6 +6,10 @@ Notable changes to the extension. The version is `manifest.json`'s `version`;
 
 ## [Unreleased]
 
+### Added
+
+- the solstone extension now works in Safari on a mac, with Safari 18.4 or later. it comes with the solstone app, and you turn it on in Safari's settings, under extensions. it takes in nothing from private windows, even where your browser lets it run there.
+
 ### Fixed
 
 - the welcome page shows its disclosure as a list and explains how to open solstone from the toolbar or extensions menu. browser names keep their own case.

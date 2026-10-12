@@ -1,6 +1,6 @@
 # Contributor instructions
 
-This repository implements the native-messaging browser extension for desktop Chrome, Edge and Firefox. Read [README.md](README.md), [INSTALL.md](INSTALL.md), and [RELEASE.md](RELEASE.md) before changing its lifecycle or packaging.
+This repository implements the native-messaging browser extension for desktop Chrome, Edge and Firefox, and for Safari on macOS, where the solstone app carries it and relays its messages. Read [README.md](README.md), [INSTALL.md](INSTALL.md), and [RELEASE.md](RELEASE.md) before changing its lifecycle or packaging.
 
 ## Architecture and boundaries
 
