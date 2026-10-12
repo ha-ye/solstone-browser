@@ -94,7 +94,7 @@ no analytics. no telemetry. no phone home. nobody counted.`;
       return `${bName} doesn't let extensions work on this page`;
     }
     let short = s.replace(/\s+/g, " ").trim();
-    if (short.length > 80) short = short.slice(0, 80) + "…";
+    if (short.length > 80) short = short.slice(0, 80) + "\u2026";
     return `something went wrong on this site: ${escapeToken(short)}`;
   }
 

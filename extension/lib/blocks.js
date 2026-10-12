@@ -104,7 +104,7 @@
   // DOM (soft-hyphen, CGJ, Mongolian vowel separator, ZWSP/ZWNJ/ZWJ, word-joiner,
   // BOM). Stripping them makes identical content hash identically (kills
   // preheader-junk churn) and collapses pure-invisible runs to empty.
-  const INVISIBLE = /[­͏᠎​-‍⁠﻿]/;
+  const INVISIBLE = /[\u00ad\u034f\u180e\u200b-\u200d\u2060\ufeff]/;
 
   // Pure: count of non-whitespace characters — used to drop junk (single-char,
   // separator-only, or invisible-only) blocks.
@@ -181,7 +181,7 @@
           pendingOverflow = false;
           continue;
         }
-        if (/[ \t ]/.test(point)) {
+        if (/[ \t\u00a0]/.test(point)) {
           if (pendingWhitespace !== "\n" && !pendingWhitespace.endsWith(" ")) queueWhitespace(" ");
           continue;
         }
@@ -197,7 +197,7 @@
     }
 
     function result() {
-      return { text: out + (truncated ? "…" : ""), truncated };
+      return { text: out + (truncated ? "\u2026" : ""), truncated };
     }
 
     return { append, result, get truncated() { return truncated; } };

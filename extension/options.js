@@ -223,7 +223,7 @@
   function getStep1State(st) {
     if (!st || typeof st !== "object" || st.ok === false || !st.inst) {
       return {
-        heading: "looking for the solstone app on this computer…",
+        heading: "looking for the solstone app on this computer\u2026",
         body: "",
         action: null,
         met: false,

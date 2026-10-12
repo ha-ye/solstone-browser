@@ -13,7 +13,7 @@
         value.protocol_version !== 1 || ![value.os, value.os_version, value.arch, value.journal_line].every(clean) ||
         typeof value.journal_current !== "boolean" ||
         !(value.journal_seen_at_epoch_secs === null || (Number.isSafeInteger(value.journal_seen_at_epoch_secs) && value.journal_seen_at_epoch_secs >= 0)) ||
-        !/^journal .+$/.test(value.journal_line) || value.journal_line.length > 8192 || value.journal_line.includes(" · last seen ") ||
+        !/^journal .+$/.test(value.journal_line) || value.journal_line.length > 8192 || value.journal_line.includes(" \u00b7 last seen ") ||
         (value.journal_line === "journal unknown" && (value.journal_current || value.journal_seen_at_epoch_secs !== null))) return null;
     return Object.fromEntries(KEYS.map(key => [key, value[key]]));
   }
@@ -34,11 +34,11 @@
   function block(version, value, now = Date.now() / 1000) {
     const facts = decode(value);
     let own = `solstone extension ${String(version).replace(/^v/, "")}`;
-    if (facts?.os) own += ` · ${facts.os}${facts.os_version ? " " + facts.os_version : ""}`;
-    if (facts?.arch) own += ` · ${arch(facts.arch)}`;
+    if (facts?.os) own += ` \u00b7 ${facts.os}${facts.os_version ? " " + facts.os_version : ""}`;
+    if (facts?.arch) own += ` \u00b7 ${arch(facts.arch)}`;
     let journal = facts?.journal_line || "journal unknown";
     if (facts && journal !== "journal unknown" && !facts.journal_current && facts.journal_seen_at_epoch_secs !== null) {
-      journal += ` · last seen ${age(Math.max(0, Math.floor(now - facts.journal_seen_at_epoch_secs)))}`;
+      journal += ` \u00b7 last seen ${age(Math.max(0, Math.floor(now - facts.journal_seen_at_epoch_secs)))}`;
     }
     return `${own}\n${journal}`;
   }

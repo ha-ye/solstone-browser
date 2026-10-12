@@ -287,6 +287,16 @@ export function verifySafariArtifact({ root = ROOT, stagePath } = {}) {
   const manifest = readJson(join(stagePath, "manifest.json"), "Safari manifest");
   assert.deepStrictEqual(manifest, safariManifest(sourceManifest), "Safari manifest must be the Safari overlay of the source");
   assertRuntimeFiles(manifest, (file) => existsSync(join(stagePath, file)), "Safari build");
+  // Safari reads its generated background page's scripts as Latin-1, so code
+  // (outside comments) must spell every non-ASCII character as an escape.
+  for (const reference of manifestRuntimeReferences(manifest)) {
+    if (!reference.path.endsWith(".js")) continue;
+    const code = readFileSync(join(stagePath, reference.path), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    const raw = /[^\x00-\x7f]/.exec(code);
+    assert.equal(raw, null, `Safari build: ${reference.path} has a raw non-ASCII character in code; use a \\u escape`);
+  }
 }
 
 export function verifyReleaseArtifacts({

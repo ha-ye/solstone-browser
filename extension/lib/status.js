@@ -504,12 +504,12 @@
   function iconState(status, extras) {
     const result = derive(status, extras);
     const prefix = PREFIX_BY_MARK[result.mark] || "icon-error-";
-    let title = `solstone · ${result.headline}`;
+    let title = `solstone \u00b7 ${result.headline}`;
     const shouldAppendSub = result.kind === "delivery-failed" ||
       (result.kind === "connecting" && result.connecting === "delivery") ||
       result.kind === "on" || result.kind === "idle";
     if (shouldAppendSub && result.sub) {
-      title += ` · ${result.sub}`;
+      title += ` \u00b7 ${result.sub}`;
     }
     return { prefix, title, badge: result.badge || "" };
   }
