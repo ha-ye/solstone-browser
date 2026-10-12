@@ -297,3 +297,18 @@ test("welcomeHold selects only the specified blockers from derive items", () => 
   assert.equal(S.welcomeHold(mockStatus({ hostCapture: "unavailable" })).met, false);
   assert.equal(S.derive(new Proxy({}, { get() { throw new Error("fixture"); } })).kind, "unavailable");
 });
+
+test("a private tab on an added site never counts as open", () => {
+  const grantedOrigins = ["https://example.com"];
+  const projected = S.projectOpenTabs([{ url: "https://example.com/a", incognito: true }], { grantedOrigins });
+  assert.deepEqual(projected, { known: true, openOrigins: [], anyGrantedTabOpen: false });
+  const normal = S.projectOpenTabs([{ url: "https://example.com/a", incognito: false }], { grantedOrigins });
+  assert.equal(normal.anyGrantedTabOpen, true);
+});
+
+test("Safari's manual update points to the solstone app, not Firefox", () => {
+  const item = S.derive({ brand: "safari", behind: "extension", updateCheck: "manual" }).items[0];
+  assert.equal(item.kind, "update-extension");
+  assert.match(item.reason, /update the solstone app/);
+  assert.doesNotMatch(item.reason, /Firefox/);
+});

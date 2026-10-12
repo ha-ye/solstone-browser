@@ -1238,18 +1238,25 @@ test("safari: clearing the extension's storage also forgets what its database ke
   assert.deepEqual(await cleared.SolstoneDB.getAll("outbox"), []);
 });
 
-test("safari: a running background starts over when its storage is cleared", async () => {
+test("safari: a running background forgets everything at the next alarm after a clear", async () => {
   const mock = createMockChrome();
-  let changed = null;
   let reloads = 0;
-  mock.chrome.storage.onChanged = { addListener: (fn) => { changed = fn; } };
   mock.chrome.runtime.reload = () => { reloads++; };
-  await startSafari(mock, new IDBFactory());
-  changed({ cfg: { newValue: { paused: true } } }, "local");
-  changed({ inst: { oldValue: "x", newValue: "y" } }, "local");
+  const sandbox = await startSafari(mock, new IDBFactory());
+  await sandbox.SolstoneDB.put("outbox", { batchId: "b1", origin: "https://example.com" });
+  const tick = () => new Promise((resolve) => {
+    mock.listeners.onAlarm[0]({ name: "native-port" });
+    setTimeout(resolve, 50);
+  });
+  await tick();
   assert.equal(reloads, 0);
-  changed({ inst: { oldValue: "x" } }, "local");
+  assert.equal((await sandbox.SolstoneDB.getAll("outbox")).length, 1);
+
+  for (const key of Object.keys(mock.storageData)) delete mock.storageData[key];
+  await tick();
   assert.equal(reloads, 1);
+  assert.deepEqual(await sandbox.SolstoneDB.getAll("outbox"), []);
+  assert.equal(await sandbox.SolstoneDB.get("meta", "inst"), undefined);
 });
 
 test("chrome: the database is not tied to a storage.local mirror", async () => {

@@ -421,10 +421,11 @@ async function runReconcile() {
 // mirror means the owner cleared it, and what the database kept goes too.
 async function forgetClearedSafariStorage() {
   const kept = await DB.get("meta", "inst");
-  if (!kept) return;
+  if (!kept) return false;
   const mirror = await chrome.storage.local.get("inst");
-  if (mirror.inst === kept) return;
+  if (mirror.inst === kept) return false;
   for (const store of ["meta", "outbox", "producer"]) await DB.clear(store);
+  return true;
 }
 
 async function doInit() {
@@ -592,6 +593,12 @@ chrome.tabs.onUpdated?.addListener(() => refreshOpenTabs());
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
     ensureInit().then(async () => {
+      // Safari doesn't tell a running extension that its storage was cleared.
+      if (globalThis.SolstoneSafariPort?.isSafari(chrome.runtime) === true &&
+          await forgetClearedSafariStorage()) {
+        chrome.runtime.reload();
+        return;
+      }
       if (port) {
         await port.poll();
       }
@@ -696,12 +703,6 @@ chrome.runtime.onInstalled.addListener((details) => {
 
 chrome.runtime.onStartup.addListener(init);
 
-// A clear while the background runs: start over, and doInit forgets the rest.
-chrome.storage.onChanged?.addListener((changes, area) => {
-  if (area !== "local" || !changes.inst || changes.inst.newValue !== undefined) return;
-  if (globalThis.SolstoneSafariPort?.isSafari(chrome.runtime) !== true) return;
-  try { chrome.runtime.reload(); } catch (_e) { /* the next start forgets it */ }
-});
 chrome.runtime.onUpdateAvailable?.addListener(() => {
   if (!port) return;
   port.updateCheck = "update-available";
