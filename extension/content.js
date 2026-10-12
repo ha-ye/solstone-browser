@@ -6,6 +6,8 @@
 
   if (globalThis.__solstoneBrowserContent) return;
   globalThis.__solstoneBrowserContent = true;
+  // Private windows are never read (Safari can run extensions there).
+  if (globalThis.chrome?.extension?.inIncognitoContext === true) return;
 
   const A = globalThis.SolstoneAdapters;
   const Skim = globalThis.SolstoneSkim;

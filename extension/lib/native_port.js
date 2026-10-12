@@ -29,18 +29,30 @@
     if (
       runtimeId === table.production?.chrome_id ||
       runtimeId === table.production?.edge_id ||
-      runtimeId === table.production?.firefox_id
+      runtimeId === table.production?.firefox_id ||
+      (table.production?.safari_id && runtimeId === table.production.safari_id)
     ) {
       return table.production.host;
     }
     return null;
   }
 
-  function resolveBrand() {
+  function resolveBrand(runtime = typeof chrome !== "undefined" ? chrome.runtime : null) {
+    // Safari's user agent resembles Chrome's, so the extension's own scheme decides.
+    if (runtime && globalThis.SolstoneSafariPort?.isSafari(runtime)) return "safari";
     const ua = typeof navigator !== "undefined" && navigator.userAgent ? navigator.userAgent : "";
     if (ua.includes("Firefox/")) return "firefox";
     if (ua.includes("Edg/")) return "edge";
     return "chrome";
+  }
+
+  function defaultConnectNative() {
+    if (typeof chrome === "undefined" || !chrome.runtime?.connectNative) return null;
+    const runtime = chrome.runtime;
+    if (globalThis.SolstoneSafariPort?.isSafari(runtime)) {
+      return (host) => globalThis.SolstoneSafariPort.connect(runtime, host);
+    }
+    return runtime.connectNative.bind(runtime);
   }
 
   function mintConnectionToken() {
@@ -53,7 +65,7 @@
 
   class SolstoneNativePortController {
     constructor(options = {}) {
-      this.connectNative = options.connectNative || (typeof chrome !== "undefined" && chrome.runtime?.connectNative ? chrome.runtime.connectNative.bind(chrome.runtime) : null);
+      this.connectNative = options.connectNative || defaultConnectNative();
       this.now = options.now || (() => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now()));
       this.wallNow = options.wallNow || (() => Math.floor(Date.now()));
       this.schedule = options.schedule || ((fn, ms) => {

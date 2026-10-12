@@ -15,7 +15,7 @@ import { cpSync, rmSync, mkdirSync, readFileSync, writeFileSync, existsSync, rea
 import { execFileSync } from "node:child_process";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { verifyReleaseArtifacts } from "./verify-package.mjs";
+import { safariManifest, verifyReleaseArtifacts, verifySafariArtifact } from "./verify-package.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const NAME = "solstone-browser";
@@ -118,6 +118,19 @@ try {
 }
 if (packageError) fail(packageError.message);
 
+// ---- 3b. the Safari build: the folder the Mac app embeds in its Safari
+// extension bundle. Same runtime files, Safari's manifest overlay. ----
+const safariStage = join(DIST, `${NAME}-${VERSION}-safari`);
+try {
+  cpSync(stage, safariStage, { recursive: true });
+  const safariManifestPath = join(safariStage, "manifest.json");
+  const source = JSON.parse(readFileSync(join(EXT, "manifest.json"), "utf8"));
+  writeFileSync(safariManifestPath, `${JSON.stringify(safariManifest(source), null, 2)}\n`);
+  verifySafariArtifact({ root: ROOT, stagePath: safariStage });
+} catch (error) {
+  fail(error.message);
+}
+
 // ---- 4. the stable reload target: dist/current -> the validated version.
 // Load unpacked dist/current ONCE; every `make dist` re-points it and you just
 // hit reload in Chrome. The manifest `key` pins the extension id, so the id (and
@@ -135,5 +148,6 @@ console.log(`    ${current}   ->   ${NAME}-${VERSION}`);
 console.log(`\n  versioned build: ${stage}`);
 console.log(`  development ZIP (retains pinned id): ${devZipPath}`);
 console.log(`  Chrome Web Store upload candidate (no key/update_url): ${cwsZipPath}`);
+console.log(`  Safari build (embedded by the Mac app): ${safariStage}`);
 console.log(`  dashboard upload remains the authoritative Store validation`);
 console.log(`\nrelease build OK`);

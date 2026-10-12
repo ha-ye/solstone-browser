@@ -457,6 +457,19 @@ addVector({
 });
 
 addVector({
+  id: "hello_safari_positive",
+  direction: "extension_to_host",
+  payloadObj: {
+    type: "hello",
+    protocol: 1,
+    version: "1.0.0",
+    brand: "safari",
+    inst: "desktop_inst_safari",
+  },
+  expect: "accept",
+});
+
+addVector({
   id: "hello_wrong_direction",
   direction: "host_to_extension",
   payloadObj: {
@@ -771,7 +784,7 @@ addVector({
     type: "hello",
     protocol: 1,
     version: "1.0.0",
-    brand: "safari",
+    brand: "opera",
     inst: "inst1",
   },
   expect: "refuse",

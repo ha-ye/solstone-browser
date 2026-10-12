@@ -133,6 +133,25 @@ test("router: content script commands rejected if origin not granted", async () 
   assert.deepEqual(res, { ok: false, error: "origin_not_granted" });
 });
 
+test("router: a private-window tab is refused even on a granted site", async () => {
+  await resetDB();
+  const port = makePort();
+  port.grantedOrigins.add("https://mail.google.com");
+  const sender = {
+    id: EXT_ID,
+    tab: { id: 11, incognito: true },
+    frameId: 0,
+    url: "https://mail.google.com/mail/u/0",
+    origin: "https://mail.google.com",
+    documentId: "doc-private",
+  };
+  for (const kind of ["hello", "skim"]) {
+    const res = await Router.route({ kind, realmToken: "realm-1" }, sender, { runtimeId: EXT_ID, port, confirmRealm });
+    assert.deepEqual(res, { ok: false, error: "private_window" });
+  }
+  assert.equal(Router.frameBindings.size, 0);
+});
+
 test("router: content script creates realm binding on hello", async () => {
   await resetDB();
   const port = makePort();

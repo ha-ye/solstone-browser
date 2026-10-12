@@ -108,7 +108,7 @@
       const expected = new URL(typeof chrome !== "undefined" && chrome.runtime?.getURL
         ? chrome.runtime.getURL("/") : `chrome-extension://${runtimeId}/`);
       const actual = new URL(sender.url || "");
-      return (expected.protocol === "chrome-extension:" || expected.protocol === "moz-extension:") &&
+      return ["chrome-extension:", "moz-extension:", "safari-web-extension:"].includes(expected.protocol) &&
         actual.protocol === expected.protocol && actual.host === expected.host &&
         !actual.username && !actual.password;
     } catch (_err) { return false; }
@@ -447,6 +447,11 @@
 
     if (!sender.tab || sender.tab.id == null) {
       return { ok: false, error: "unauthorized" };
+    }
+    // Safari ignores the manifest's private-window exclusion once the owner
+    // allows the extension there, so private tabs are refused here as well.
+    if (sender.tab.incognito === true) {
+      return { ok: false, error: "private_window" };
     }
 
     const tabId = sender.tab.id;

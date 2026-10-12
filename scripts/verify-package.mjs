@@ -268,6 +268,27 @@ function assertRequiredArchiveFiles(root, filesSet, label) {
   }
 }
 
+// The Safari build rides inside the Mac app's extension bundle. It differs from
+// the source only where Safari's runtime does: no Chrome identity or Gecko
+// settings, an event-page background, and the minimum Safari that loads a
+// Developer ID extension outside the App Store.
+export function safariManifest(sourceManifest) {
+  const manifest = structuredClone(sourceManifest);
+  delete manifest.key;
+  delete manifest.update_url;
+  delete manifest.minimum_chrome_version;
+  manifest.background = { scripts: [...sourceManifest.background.scripts], persistent: false };
+  manifest.browser_specific_settings = { safari: { strict_min_version: "18.4" } };
+  return manifest;
+}
+
+export function verifySafariArtifact({ root = ROOT, stagePath } = {}) {
+  const sourceManifest = readJson(join(root, "extension", "manifest.json"), "source manifest");
+  const manifest = readJson(join(stagePath, "manifest.json"), "Safari manifest");
+  assert.deepStrictEqual(manifest, safariManifest(sourceManifest), "Safari manifest must be the Safari overlay of the source");
+  assertRuntimeFiles(manifest, (file) => existsSync(join(stagePath, file)), "Safari build");
+}
+
 export function verifyReleaseArtifacts({
   root = ROOT,
   version,
