@@ -39,17 +39,4 @@ Run the shared raw-message vectors in JavaScript, Rust and each native implement
 
 ## Chrome Web Store operations
 
-The existing **Chrome Web Store** workflow is manually dispatched and uses its protected GitHub environment. Do not add an automatic release workflow. The local operator interface is:
-
-```sh
-make cws-status
-make cws-stage CWS_CONFIRM=<exact-version>
-make cws-publish-staged CWS_CONFIRM=<exact-version>
-make cws-cancel CWS_CONFIRM=<exact-version>
-```
-
-The first command reads status. The remaining commands mutate store state and require explicit release authorization. `cws-stage` builds, uploads and submits for staged review; approval does not publish it. Publish only the approved staged version. Cancellation requires its own authorization.
-
-The tooling uses short-lived publisher credentials. Do not add a long-lived key fallback. Read-only status, pending review, staged approval and publication are distinct outcomes.
-
 Listing text, screenshots, privacy declarations and visibility are maintained in the store dashboard. Review them separately from the ZIP. Firefox signing and publication must be established before offering an installable Firefox release; a temporary development add-on is not a signed distribution.

@@ -6,7 +6,7 @@
 # installs locked dev dependencies for real-IDB checks.
 # The CDP skim smoke needs a real Chrome.
 
-.PHONY: install test test-idb ci format brand-sync clean smoke popup-check e2e-deps dist cws cws-status cws-stage cws-publish-staged cws-cancel package-check set-version
+.PHONY: install test test-idb ci format brand-sync clean smoke popup-check e2e-deps dist cws package-check set-version
 
 # Install locked development tools. Nothing from node_modules ships in extension/.
 install:
@@ -86,22 +86,6 @@ dist: ci
 # Store-specific spelling for operators preparing a dashboard upload. This runs
 # the same full gate as make dist; only the resulting -cws.zip is Store-ready.
 cws: dist
-
-# Chrome Web Store API V2 operator commands. Local calls use jer's interactive
-# gcloud identity to impersonate the publisher service account; there is no
-# unattended key fallback. CI uses GitHub OIDC/WIF. Status tokens are read-only;
-# mutations require CWS_CONFIRM to match the exact manifest version.
-cws-status:
-	node scripts/cws.mjs status
-
-cws-stage: dist
-	node scripts/cws.mjs stage --confirm-version $(CWS_CONFIRM)
-
-cws-publish-staged:
-	node scripts/cws.mjs publish-staged --confirm-version $(CWS_CONFIRM)
-
-cws-cancel:
-	node scripts/cws.mjs cancel --confirm-version $(CWS_CONFIRM)
 
 # Reopen already-built release ZIPs and verify their package-level contracts.
 package-check:

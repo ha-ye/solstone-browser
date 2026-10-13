@@ -41,7 +41,7 @@ For permission tests, use the real owner gesture and browser prompt. A fixture m
 
 One manifest contains both browser background forms. Keep the Firefox script order aligned with the service worker imports, preserve private-window exclusion and the required data declarations, and reopen every archive to check referenced runtime files. Production and development identities select different native host names; never merge their allowlists.
 
-Keep the existing manually dispatched Chrome Web Store workflow as the only GitHub workflow. Do not publish, submit to a store or change a release channel as a side effect of tests. Package construction and release approval are separate steps.
+Do not publish, submit to a store or change a release channel as a side effect of tests. Package construction and release approval are separate steps.
 
 New JavaScript source begins with:
 
