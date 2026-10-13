@@ -6,14 +6,26 @@ Notable changes to the extension. The version is `manifest.json`'s `version`;
 
 ## [Unreleased]
 
+## [0.3.0] (2026-10-13)
+
 ### Added
 
 - the solstone extension now works in Safari on a mac, with Safari 18.4 or later. it comes with the solstone app, and you turn it on in Safari's settings, under extensions. it takes in nothing from private windows, even where your browser lets it run there.
 
 ### Fixed
 
-- the welcome page shows its disclosure as a list and explains how to open solstone from the toolbar or extensions menu. browser names keep their own case.
 - when you add a site, the confirmation names the site, like `example.com`, not its full web address.
+- in Safari, clearing the extension's storage now also clears the sites and agreement it held in memory.
+
+## [0.2.0] (2026-10-11, Chrome Web Store)
+
+this is the 0.2.0 that reached the Chrome Web Store, built from `731a80d`. the July entry below describes an earlier build that used the same version number.
+
+- the extension connects to the solstone app on this computer. what you share goes into your journal over the link you've already paired.
+- before you add a site, the welcome page explains what the extension takes in and asks you to agree. the disclosure appears as a list, with instructions for opening solstone from the toolbar or extensions menu.
+- pages waiting to go into your journal stay on this computer through a lost connection or a change of pairing. once you confirm the new journal's mark, waiting pages go there.
+- the popup and settings show whether new pages can be taken in and whether pages are waiting to go into your journal. pausing stops new page reading while pages already taken in can still go into your journal.
+- the popup's about section shows a copyable version line for the extension and your journal.
 
 ## 0.2.0 (2026-07-30)
 
