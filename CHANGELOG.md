@@ -13,6 +13,7 @@ Notable changes to the extension. The version is `manifest.json`'s `version`;
 ### Fixed
 
 - the welcome page shows its disclosure as a list and explains how to open solstone from the toolbar or extensions menu. browser names keep their own case.
+- when you add a site, the confirmation names the site, like `example.com`, not its full web address.
 
 ## 0.2.0 (2026-07-30)
 

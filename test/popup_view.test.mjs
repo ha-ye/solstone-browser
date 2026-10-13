@@ -151,6 +151,28 @@ test("addSite confirms before intent and permission in exact order", async () =>
   assert.deepEqual(result, { ok: true });
 });
 
+test("addSite from a page origin names the host on the sheet and grants the origin", async () => {
+  const calls = [];
+  const result = await View.addSite("https://httpbin.org", {
+    status: { consentVersion: 1, addSiteEligible: true },
+    disclose: async (host) => { calls.push(["disclose", host]); return true; },
+    cmd: async (message) => {
+      calls.push([message.cmd, message.origin]);
+      if (message.cmd === "getState") return { consentVersion: 1, addSiteEligible: true };
+      return { ok: true };
+    },
+    requestPermission: async (request) => { calls.push(["permission", request.origins[0]]); return true; },
+  });
+  assert.deepEqual(calls, [
+    ["disclose", "httpbin.org"],
+    ["intendAddOrigin", "https://httpbin.org"],
+    ["permission", "*://httpbin.org/*"],
+    ["getState", undefined],
+    ["addGrantedOrigin", "https://httpbin.org"],
+  ]);
+  assert.deepEqual(result, { ok: true });
+});
+
 test("an unconfirmed add reaches no mutation or permission effect", async () => {
   const calls = [];
   const result = await View.addSite("new.example", {
