@@ -1,6 +1,6 @@
 # Package and release reference
 
-The native return is under development. Package creation does not authorize store submission or publication. Complete installed-app compatibility, security, owner-copy and store-declaration review before a public release.
+Package creation does not authorize store submission or publication. Complete installed-app compatibility, security, owner-copy and store-declaration review before a public release.
 
 ## Package identities
 

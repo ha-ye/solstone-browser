@@ -1,6 +1,6 @@
 # solstone-browser
 
-Development source for the browser extension that connects to the solstone app on the same computer through native messaging. The native return is under development; this checkout is not a published extension release.
+Development source for the browser extension that connects to the solstone app on the same computer through native messaging.
 
 The solstone app takes in what you share with it, and all of it goes into your journal. In this extension, you choose sites and agree to the disclosure before any page reading begins. A compatible running app must also authorize it. The extension sends page material only through the native connection; the app owns delivery to your journal.
 

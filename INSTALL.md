@@ -1,6 +1,6 @@
 # Build the development extension
 
-These instructions are for contributors. The native return is under development and is not a published extension release. A development package alone cannot send pages to your journal: it also needs a compatible development build of the solstone app and that app's native-host registration.
+These instructions are for contributors. A development package alone cannot send pages to your journal: it also needs a compatible development build of the solstone app and that app's native-host registration.
 
 ## Build
 
