@@ -160,7 +160,12 @@ test("the options binder drives Welcome mode, disclosure agreement, and Settings
     "step2PendingText", "step2Actions", "agreeDisclosureBtn", "step2Completed", "step2ReReadDetails", "step2ReadAgain", "step2ReReadBody",
     "step3Section", "step3HeadingRow", "step3Check", "step3Heading", "step3Content", "step3Body", "welcomeShowPageIndicator", "welcomeSiteList",
     "statusCard", "statusLead", "statusStateChip", "statusReason", "sitesCard",
-    "statusAlso", "statusActions", "sitesHeading", "siteInputLabel", "siteModeHelp", "allSitesAccess", "selectedSitesMode", "allSitesMode",
+    "statusAlso", "statusActions", "sitesHeading", "siteInputLabel", "siteModeHelp",
+    "modeSelected", "modeSelectedTitle", "modeSelectedCurrent", "modeSelectedBody", "modeSelectedBtn",
+    "modeAll", "modeAllTitle", "modeAllCurrent", "modeAllBody", "modeAllBtn",
+    "accessPanel", "accessGranted", "accessMissing", "accessTitle", "accessBody", "accessSteps", "accessReturn",
+    "accessAllow", "accessCheck", "accessChecking", "accessDenied", "accessDeniedTitle", "accessDeniedList", "accessDeniedHelp",
+    "listHeading", "regrant", "regrantLine", "regrantBtn", "siteInputError", "keptNote", "siteDisclosureLeaveOut",
     "sitesMain", "addForm", "newHost", "addBtn", "siteList", "siteDisclosure",
     "siteDisclosureTitle", "siteDisclosureWhat", "siteDisclosureUnsent", "siteDisclosureDestination",
     "siteDisclosureDestinationDetail", "siteDisclosureChrome", "siteDisclosureConfirm",
@@ -306,8 +311,83 @@ test("the options binder drives Welcome mode, disclosure agreement, and Settings
   await nodes.agreeDisclosureBtn.listeners.click();
   assert.equal(nodes.welcomeView.hidden, true);
   assert.equal(nodes.settingsView.hidden, false);
-  assert.equal(nodes.selectedSitesMode.checked, true);
+  assert.match(nodes.modeSelected.className, /\bcurrent\b/);
+  assert.equal(nodes.modeSelectedBtn.hidden, true);
+  assert.equal(nodes.modeAllBtn.hidden, false);
   assert.equal(nodes.step2ReReadBody.textContent, C.DISCLOSURE_BODY.replace(/^- /gm, "").replaceAll("\n", ""));
+
+  // 6b. All sites has its own agreement. Opening and cancelling it changes nothing.
+  const settle = async () => { for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve)); };
+  const scopeCommands = (from) => sentMessages.slice(from).filter((m) => ["setSiteMode", "intendAllSites"].includes(m.cmd));
+  const savedState = liveState;
+  let from = sentMessages.length;
+  const cancelled = nodes.modeAllBtn.listeners.click();
+  await settle();
+  assert.equal(nodes.siteDisclosure.hidden, false);
+  assert.equal(nodes.sitesMain.hidden, true);
+  assert.ok(nodes.siteDisclosureTitle.focusCount > 0, "the agreement is read from its title");
+  assert.deepEqual(scopeCommands(from), []);
+  const returnFocus = nodes.modeAllBtn.focusCount;
+  nodes.siteDisclosureCancel.listeners.click();
+  await cancelled;
+  assert.equal(nodes.siteDisclosure.hidden, true);
+  assert.equal(nodes.sitesMain.hidden, false);
+  assert.equal(nodes.modeAllBtn.focusCount, returnFocus + 1);
+  assert.deepEqual(scopeCommands(from), []);
+
+  // Agreeing asks the browser in the same gesture, then records the agreement.
+  from = sentMessages.length;
+  const agreed = nodes.modeAllBtn.listeners.click();
+  await settle();
+  nodes.siteDisclosureConfirm.listeners.click();
+  await agreed;
+  await settle();
+  const scope = scopeCommands(from);
+  assert.deepEqual(scope.map((m) => m.cmd), ["intendAllSites", "setSiteMode"]);
+  assert.equal(scope[1].mode, "all");
+  assert.equal(scope[1].agreed, true);
+
+  // Safari answers only in its own settings: steps and a re-check, no prompt button.
+  liveState = optionsState({ consentVersion: 1, brand: "safari", siteMode: "all", allSitesConsent: 1, broadGranted: false,
+    chosenOrigins: ["https://mail.google.com"], excludedHosts: ["bank.example"] });
+  await globalThis.SolstoneOptions.refresh();
+  assert.equal(nodes.accessPanel.hidden, false);
+  assert.equal(nodes.accessMissing.hidden, false);
+  assert.equal(nodes.accessAllow.hidden, true);
+  assert.equal(nodes.accessCheck.hidden, false);
+  assert.equal(nodes.accessSteps.children.length, 3);
+  assert.equal(nodes.modeAllBtn.hidden, true);
+  assert.equal(nodes.modeSelectedBtn.hidden, false);
+  assert.equal(nodes.siteList.children.length, 1);
+  assert.equal(nodes.keptNote.hidden, false);
+  // Access granted in Safari's settings is picked up on the re-check and announced.
+  liveState = optionsState(Object.assign({}, liveState, { broadGranted: true, allSitesRegistration: "ready" }));
+  from = sentMessages.length;
+  await nodes.accessCheck.listeners.click();
+  assert.ok(sentMessages.slice(from).some((m) => m.cmd === "refreshSiteAccess"));
+  assert.equal(nodes.accessMissing.hidden, true);
+  assert.equal(nodes.accessGranted.hidden, false);
+  assert.match(nodes.actionMessage.className, /\bok\b/);
+
+  // Chrome without the broad grant offers the browser's prompt directly.
+  liveState = optionsState(Object.assign({}, liveState, { brand: "chrome", broadGranted: false }));
+  await globalThis.SolstoneOptions.refresh();
+  assert.equal(nodes.accessAllow.hidden, false);
+  assert.equal(nodes.accessCheck.hidden, true);
+
+  // Switching back is immediate and names the browser re-grant it needs.
+  liveState = optionsState({ consentVersion: 1, siteMode: "selected", allSitesConsent: 1,
+    chosenOrigins: ["https://mail.google.com", "https://app.slack.com"], grantedOrigins: [],
+    inactiveOrigins: ["https://mail.google.com", "https://app.slack.com"], excludedHosts: ["bank.example"] });
+  from = sentMessages.length;
+  await nodes.modeSelectedBtn.listeners.click();
+  const back = sentMessages.slice(from).find((m) => m.cmd === "setSiteMode");
+  assert.equal(back.mode, "selected");
+  assert.equal(back.agreed, undefined);
+  assert.equal(nodes.regrant.hidden, false);
+  assert.ok(nodes.sitesHeading.focusCount > 0);
+  liveState = savedState;
+  await globalThis.SolstoneOptions.refresh();
 
   // 7. Step 1 with custody.full, hostCapture: "permitted", and lossNotice shows full-store headline and not dropped reason
   liveState = optionsState({

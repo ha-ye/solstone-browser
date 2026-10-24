@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 await import(new URL("../extension/lib/copy.js", import.meta.url));
+await import(new URL("../extension/lib/hosts.js", import.meta.url));
 await import(new URL("../extension/lib/status.js", import.meta.url));
 
 const S = globalThis.SolstoneStatus;
@@ -311,4 +312,37 @@ test("Safari's manual update points to the solstone app, not Firefox", () => {
   assert.equal(item.kind, "update-extension");
   assert.match(item.reason, /update the solstone app/);
   assert.doesNotMatch(item.reason, /Firefox/);
+});
+
+test("all-sites site rows never offer a per-site grant", () => {
+  const all = (over = {}) => mockStatus(Object.assign({ siteMode: "all", allSitesConsent: 1, broadGranted: true,
+    excludedHosts: ["left.example"], browserDeniedOrigins: ["https://denied.example"],
+    openTabs: { known: true, openOrigins: ["https://news.example"], anyGrantedTabOpen: true } }, over));
+  assert.equal(S.siteRow("https://news.example", all()).kind, "on-now");
+  assert.equal(S.siteRow("https://quiet.example", all()).kind, "included");
+  assert.equal(S.siteRow("https://left.example", all()).kind, "excluded");
+  assert.equal(S.siteRow("https://denied.example", all()).kind, "denied-by-browser");
+  assert.equal(S.siteRow("https://news.example", all({ paused: true })).kind, "paused");
+  assert.equal(S.siteRow("https://news.example", all({ broadGranted: false })).kind, "not-taken-in");
+  assert.equal(S.siteRow("https://news.example", all({ sitePolicyPending: true })).kind, "not-taken-in");
+  assert.equal(S.siteRow("https://news.example", all({ allSitesRegistration: "failed" })).kind, "not-taken-in");
+  for (const over of [{}, { broadGranted: false }, { paused: true }]) {
+    for (const origin of ["https://news.example", "https://denied.example", "https://left.example"]) {
+      assert.equal(S.siteRow(origin, all(over)).action, null);
+    }
+  }
+});
+
+test("missing all-sites access asks in the browser that can answer", () => {
+  const missing = (brand) => S.derive(mockStatus({ brand, siteMode: "all", allSitesConsent: 1, broadGranted: false }));
+  assert.equal(missing("chrome").kind, "all-sites-access");
+  assert.equal(missing("chrome").action.id, "allow-all-sites");
+  assert.equal(missing("firefox").action.id, "allow-all-sites");
+  assert.equal(missing("safari").action.id, "open-settings");
+  const stale = S.derive(mockStatus({ siteMode: "all", allSitesConsent: 0, broadGranted: true }));
+  assert.equal(stale.kind, "all-sites-agreement");
+  assert.equal(stale.action.id, "open-settings");
+  const failed = S.derive(mockStatus({ siteMode: "all", allSitesConsent: 1, broadGranted: true, allSitesRegistration: "failed" }));
+  assert.equal(failed.kind, "all-sites-registration");
+  assert.equal(failed.action.id, "retry-all-sites");
 });

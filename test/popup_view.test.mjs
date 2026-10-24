@@ -61,7 +61,9 @@ function derived(overrides = {}) {
 
 test("arrange returns sections in the fixed render order and omits absent sections", () => {
   const empty = View.arrange(derived(), state(), { host: "mail.google.com", ok: true });
-  assert.deepEqual(empty.map((section) => section.id), ["verdict", "page", "footer"]);
+  assert.deepEqual(empty.map((section) => section.id), ["verdict", "page", "siteCount", "footer"]);
+  const beforeAgreement = View.arrange(derived(), state({ consentVersion: 0 }), { host: "mail.google.com", ok: true });
+  assert.deepEqual(beforeAgreement.map((section) => section.id), ["verdict", "page", "footer"]);
 
   const configured = state({
     chosenOrigins: ["https://mail.google.com", "https://app.slack.com"],
@@ -114,7 +116,7 @@ test("arrange preserves exact origins and exposes truncation as a separate atten
     },
   });
   const sections = View.arrange(derived(), s, { origin: second, host: "same.example", ok: true });
-  assert.equal(sections.find((section) => section.id === "siteCount").text, "2 sites, 1 on");
+  assert.equal(sections.find((section) => section.id === "siteCount").mode, "selected");
   assert.ok(sections.find((section) => section.id === "page").state);
   const row = sections.find((section) => section.id === "siteIssues").rows.find((item) => item.kind === "truncated");
   assert.equal(row.origin, second);
@@ -212,4 +214,81 @@ test("grantSite sends intendAddOrigin before permission and checks eligibility",
   });
   assert.deepEqual(calls, ["intendAddOrigin", "permission", "getState", "addGrantedOrigin"]);
   assert.deepEqual(result, { ok: true });
+});
+
+test("the page block names pages the extension never reads instead of offering an add", () => {
+  const all = state({ siteMode: "all", allSitesConsent: 1, broadGranted: true, excludedHosts: ["bank.example"] });
+  const page = (st, p) => View.arrange(derived(), st, p).find((section) => section.id === "page");
+
+  for (const mode of [state(), all]) {
+    const inPrivate = page(mode, { origin: "", host: "news.example", ok: false, kind: "private" });
+    assert.equal(inPrivate.kind, "private");
+    assert.equal(inPrivate.siteAction, null);
+    assert.ok(inPrivate.pauseAction || mode.siteMode !== "all");
+    const restricted = page(mode, { origin: "", host: "", ok: false, kind: "restricted" });
+    assert.equal(restricted.kind, "restricted");
+    assert.equal(restricted.siteAction, null);
+  }
+
+  const unseen = page(all, { origin: "", host: "", ok: false, kind: "unknown" });
+  assert.equal(unseen.kind, "unknown");
+  assert.equal(unseen.siteAction, null);
+  // Selected mode keeps the unavailable add for a page it can't see.
+  const unseenSelected = page(state(), { origin: "", host: "", ok: false, kind: "unknown" });
+  assert.equal(unseenSelected.siteAction.disabled, true);
+
+  const shared = page(all, { origin: "https://news.example", host: "news.example", ok: true, kind: "web" });
+  assert.equal(shared.siteAction.id, "exclude-site");
+  assert.ok(shared.note.includes("news.example"));
+  const left = page(all, { origin: "https://bank.example", host: "bank.example", ok: true, kind: "web" });
+  assert.equal(left.siteAction.id, "include-site");
+  assert.equal(left.note, "");
+  const noGrant = page(Object.assign({}, all, { broadGranted: false }), { origin: "https://news.example", host: "news.example", ok: true, kind: "web" });
+  assert.equal(noGrant.note, "");
+
+  const sharing = View.arrange(derived(), all, { origin: "", host: "", ok: false, kind: "unknown" }).find((section) => section.id === "siteCount");
+  assert.equal(sharing.mode, "all");
+});
+
+test("regrantAllSites asks only under the current all-sites agreement and never changes the mode", async () => {
+  const calls = [];
+  const effects = (status, granted, fresh = status) => ({
+    status,
+    cmd: async (message) => { calls.push(message.cmd); return message.cmd === "getState" ? fresh : { ok: true }; },
+    requestPermission: async (request) => { calls.push(["request", request.origins]); return granted; },
+    removePermission: async (request) => { calls.push(["remove", request.origins]); return true; },
+  });
+  const all = { siteMode: "all", allSitesConsent: 1, consentVersion: 1 };
+  assert.equal((await View.regrantAllSites(effects({ siteMode: "selected", consentVersion: 1 }, true))).error, "wrong_site_mode");
+  assert.equal((await View.regrantAllSites(effects({ siteMode: "all", allSitesConsent: 0, consentVersion: 1 }, true))).error, "wrong_site_mode");
+  assert.deepEqual(calls, []);
+  assert.equal((await View.regrantAllSites(effects(all, false))).denied, true);
+  assert.deepEqual(calls, ["intendAllSites", ["request", ["*://*/*"]], "clearAddIntent"]);
+  calls.length = 0;
+  assert.equal((await View.regrantAllSites(effects(all, true))).ok, true);
+  assert.deepEqual(calls, ["intendAllSites", ["request", ["*://*/*"]], "clearAddIntent", "getState", "refreshSiteAccess"]);
+  // A stale popup snapshot: the owner switched back meanwhile, so the grant is returned.
+  calls.length = 0;
+  assert.equal((await View.regrantAllSites(effects(all, true, { siteMode: "selected", allSitesConsent: 1 }))).error, "wrong_site_mode");
+  assert.deepEqual(calls, ["intendAllSites", ["request", ["*://*/*"]], "clearAddIntent", "getState", ["remove", ["*://*/*"]]]);
+  assert.ok(!calls.includes("setSiteMode"));
+});
+
+test("grantChosenSites asks once for chosen sites only", async () => {
+  const requests = [];
+  const sent = [];
+  const result = await View.grantChosenSites(["https://mail.google.com", "https://app.slack.com", "https://never.example"], {
+    status: { siteMode: "selected", chosenOrigins: ["https://mail.google.com", "https://app.slack.com"] },
+    cmd: async (message) => { sent.push(message.cmd); return { ok: true }; },
+    requestPermission: async (request) => { requests.push(request.origins); return true; },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].length, 2);
+  assert.ok(!requests[0].some((pattern) => pattern.includes("never.example")));
+  assert.deepEqual(sent, ["refreshSiteAccess"]);
+  const wrongMode = await View.grantChosenSites(["https://mail.google.com"], {
+    status: { siteMode: "all", chosenOrigins: ["https://mail.google.com"] }, cmd: async () => ({}), requestPermission: async () => true,
+  });
+  assert.equal(wrongMode.error, "wrong_site_mode");
 });

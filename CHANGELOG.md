@@ -8,7 +8,7 @@ Notable changes to the extension. The version is `manifest.json`'s `version`;
 
 ### Added
 
-- choose all sites in the extension's settings, with a separate agreement and sites you can leave out. sites you add one at a time remain the default, and your list returns when you switch back. Safari uses its own website settings to allow access.
+- choose all sites in the extension's settings, after a separate agreement, and leave out the sites you don't want. sites you add one at a time remain the default, and your list is kept for when you switch back. the popup names how you're sharing and why the page you're on is or isn't shared. in Safari, settings shows you how to allow all websites in Safari's own settings, and checks again when you come back.
 
 ## [0.3.0] (2026-10-13)
 
