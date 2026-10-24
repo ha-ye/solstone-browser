@@ -667,21 +667,31 @@
   async function checkAccess(explicit) {
     if (state?.siteMode !== "all") { await refresh(); return; }
     if (accessCheck) return;
-    accessCheck = cmd({ cmd: "refreshSiteAccess" });
+    // A check that doesn't answer gives up, so check again always works; the
+    // status channel still brings the answer whenever the browser gives it.
+    accessCheck = Promise.race([cmd({ cmd: "refreshSiteAccess" }),
+      new Promise((resolve) => setTimeout(() => resolve({ timedOut: true }), 10000))]);
     renderSites();
     const result = await accessCheck;
     accessCheck = null;
     await refresh();
-    if (result?.error) showActionError(result.error);
+    if (result?.timedOut) renderSites();
+    else if (result?.error) showActionError(result.error);
     else if (explicit && state?.siteMode === "all" && state.broadGranted !== true) {
       announce(Copy.accessCopy(state?.brand).stillMissing, "bad");
     }
   }
   $("accessCheck").addEventListener("click", () => checkAccess(true));
-  window.addEventListener("focus", () => checkAccess(false));
+  // Safari can unload and restart the background without closing this page's
+  // status channel, so coming back reconnects before trusting what is shown.
+  function onReturn() {
+    subscribeStatus();
+    checkAccess(false);
+  }
+  window.addEventListener("focus", onReturn);
   if (typeof document.addEventListener === "function") {
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") checkAccess(false);
+      if (document.visibilityState === "visible") onReturn();
     });
   }
   $("regrantBtn").addEventListener("click", async () => {
@@ -694,9 +704,14 @@
 
   let subscriptionEpoch = 0;
   let reconnectTimer = null;
+  let statusPort = null;
+  let lastStatusAt = Date.now();
   function subscribeStatus() {
     const generation = ++subscriptionEpoch;
     appliedCaptureEpoch = -1;
+    lastStatusAt = Date.now();
+    try { statusPort?.disconnect?.(); } catch (_e) {}
+    statusPort = null;
     const disconnected = () => {
       if (generation !== subscriptionEpoch) return;
       subscriptionEpoch++;
@@ -713,13 +728,32 @@
     };
     try {
       const port = chrome.runtime.connect({ name: "status" });
+      statusPort = port;
       port.onMessage.addListener(msg => {
-        if (generation === subscriptionEpoch && msg?.type === "status" && msg.status) applyStatus(msg.status);
+        if (generation === subscriptionEpoch && msg?.type === "status" && msg.status) {
+          lastStatusAt = Date.now();
+          applyStatus(msg.status);
+        }
       });
       port.onDisconnect.addListener(disconnected);
     } catch (_e) { disconnected(); }
   }
   subscribeStatus();
+
+  // The background pushes status every few seconds while the app is connected.
+  // A visible page that hears nothing for a while resubscribes rather than keep
+  // showing a state from a background that is gone.
+  function watchStatus() {
+    if (typeof document.visibilityState !== "string") return;
+    setTimeout(() => {
+      if (document.visibilityState === "visible" && Date.now() - lastStatusAt > 12000) {
+        subscribeStatus();
+        refresh();
+      }
+      watchStatus();
+    }, 5000);
+  }
+  watchStatus();
 
   globalThis.SolstoneOptions = { refresh };
   refresh();

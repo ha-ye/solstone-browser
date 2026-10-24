@@ -151,7 +151,9 @@ test("the options binder drives Welcome mode, disclosure agreement, and Settings
   const originalTimeout = globalThis.setTimeout;
   globalThis.setTimeout = fn => { reconnects.push(fn); return reconnects.length; };
   t.after(() => { globalThis.setTimeout = originalTimeout; });
-  globalThis.window = { addEventListener() {} };
+  const windowListeners = {};
+  globalThis.window = { addEventListener(type, listener) { windowListeners[type] = listener; } };
+  let statusConnects = 0;
   const ids = [
     "pageHeader", "pageTitle", "pageSubTitle", "welcomeView", "settingsView",
     "warmCard", "warmKinship0", "warmKinship1", "warmKinship2", "stepsCard",
@@ -234,6 +236,7 @@ test("the options binder drives Welcome mode, disclosure agreement, and Settings
         } else callback({ ok: true });
       },
       connect() {
+        statusConnects += 1;
         return {
           onMessage: { addListener(fn) { statusListener = fn; } },
           onDisconnect: { addListener(fn) { disconnectListener = fn; } },
@@ -386,6 +389,15 @@ test("the options binder drives Welcome mode, disclosure agreement, and Settings
   assert.equal(back.agreed, undefined);
   assert.equal(nodes.regrant.hidden, false);
   assert.ok(nodes.sitesHeading.focusCount > 0);
+  // Coming back to the page reconnects the status channel before trusting it,
+  // because Safari can restart the background without closing the old one.
+  const connectsBefore = statusConnects;
+  from = sentMessages.length;
+  windowListeners.focus();
+  await settle();
+  assert.equal(statusConnects, connectsBefore + 1);
+  assert.ok(sentMessages.slice(from).some((m) => m.cmd === "getState"));
+
   liveState = savedState;
   await globalThis.SolstoneOptions.refresh();
 
