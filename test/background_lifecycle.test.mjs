@@ -123,8 +123,8 @@ function createMockChrome() {
         unregisterContentScripts: async ({ ids }) => {
           for (const id of ids) registeredScripts.delete(id);
         },
-        getRegisteredContentScripts: async ({ ids }) => {
-          return ids.map((id) => registeredScripts.get(id)).filter(Boolean);
+        getRegisteredContentScripts: async ({ ids } = {}) => {
+          return ids ? ids.map((id) => registeredScripts.get(id)).filter(Boolean) : [...registeredScripts.values()];
         },
         executeScript: async () => {},
       },
@@ -186,6 +186,154 @@ test("lifecycle (ordered scripts): manifest scripts load in order and initialize
   const port = await BG.ensureInit();
   assert.ok(port);
   assert.ok(port.inst);
+});
+
+test("all-sites bootstrap survives native lease renewal during tab enumeration", async () => {
+  const mock=createMockChrome();const sandbox=createSandbox(mock,true);
+  vm.runInNewContext(readExtFile("background.js"),sandbox);
+  const port=await sandbox.SolstoneBackground.ensureInit();port.consentVersion=1;
+  mock.grantedPermissions.add("*://*/*");
+  const injected=[];const query=mock.chrome.tabs.query;
+  mock.chrome.tabs.query=async info=>{
+    if (Array.isArray(info?.url)) {port.stateRevision++;port.notify();}
+    return query(info);
+  };
+  mock.chrome.scripting.executeScript=async request=>{injected.push(request.target.tabId);return [];};
+  const result=await new Promise(resolve=>mock.listeners.onMessage[0]({cmd:"setSiteMode",mode:"all",agreed:true},
+    {id:mock.chrome.runtime.id,url:`chrome-extension://${mock.chrome.runtime.id}/options.html`},resolve));
+  assert.equal(result.ok,true);
+  assert.ok(injected.includes(101));
+});
+
+test("all-sites queued mode and exclusion withdrawals close scope before browser effects settle", async () => {
+  for (const withdrawal of [{cmd:"setSiteMode",mode:"selected"},
+    {cmd:"setExcludedHost",host:"private.example",excluded:true}]) {
+    const mock=createMockChrome();const sandbox=createSandbox(mock,true);
+    vm.runInNewContext(readExtFile("background.js"),sandbox);
+    const port=await sandbox.SolstoneBackground.ensureInit();port.consentVersion=1;
+    mock.grantedPermissions.add("*://*/*");
+    const send=msg=>new Promise(resolve=>mock.listeners.onMessage[0](msg,
+      {id:mock.chrome.runtime.id,url:`chrome-extension://${mock.chrome.runtime.id}/options.html`},resolve));
+    await send({cmd:"setSiteMode",mode:"all",agreed:true});
+    let release;const blocker=new Promise(resolve=>release=resolve);
+    const get=mock.chrome.scripting.getRegisteredContentScripts;
+    mock.chrome.scripting.getRegisteredContentScripts=async()=>{await blocker;return get();};
+    const first=send({cmd:"setExcludedHost",host:"other.example",excluded:true});
+    await new Promise(resolve=>setImmediate(resolve));
+    const next=send(withdrawal);
+    await new Promise(resolve=>setImmediate(resolve));
+    try {
+      assert.equal(port.sitePolicyPending,true);
+      assert.equal(sandbox.SolstoneHosts.originGranted(port,"https://private.example"),false);
+    } finally {release();await Promise.all([first,next]);}
+    assert.equal(port.sitePolicyPending,false);
+    assert.equal(sandbox.SolstoneHosts.originGranted(port,"https://private.example"),false);
+  }
+});
+
+test("all-sites policy permission refresh cannot restore a withdrawn broad snapshot", async () => {
+  const mock=createMockChrome();const sandbox=createSandbox(mock,true);
+  vm.runInNewContext(readExtFile("background.js"),sandbox);
+  const port=await sandbox.SolstoneBackground.ensureInit();port.consentVersion=1;
+  const send=msg=>new Promise(resolve=>mock.listeners.onMessage[0](msg,
+    {id:mock.chrome.runtime.id,url:`chrome-extension://${mock.chrome.runtime.id}/options.html`},resolve));
+  mock.grantedPermissions.add("*://*/*");
+  let release;const blocker=new Promise(resolve=>release=resolve);const get=mock.chrome.permissions.getAll;
+  let first=true;
+  mock.chrome.permissions.getAll=async()=>{if(first){first=false;await blocker;return {origins:["*://*/*"]};}return get();};
+  const changing=send({cmd:"setSiteMode",mode:"all",agreed:true});
+  await new Promise(resolve=>setImmediate(resolve));
+  mock.grantedPermissions.delete("*://*/*");
+  await Promise.all(mock.listeners.onRemovedPerm.map(fn=>fn({origins:["*://*/*"]})));
+  release();await changing;
+  assert.equal(port.broadGranted,false);
+  assert.equal(sandbox.SolstoneHosts.originGranted(port,"https://new.example"),false);
+});
+
+test("all-sites narrowing with no removal event and failed snapshot stays closed", async () => {
+  const mock=createMockChrome();
+  mock.storageData.cfg={chosenOrigins:["https://one.example"],siteMode:"all",allSitesConsent:1};
+  const sandbox=createSandbox(mock,true);vm.runInNewContext(readExtFile("background.js"),sandbox);
+  const port=await sandbox.SolstoneBackground.ensureInit();port.consentVersion=1;
+  assert.equal(port.grantedOrigins.has("https://one.example"),true);
+  mock.chrome.permissions.getAll=async()=>{throw new Error("snapshot unavailable");};
+  const result=await new Promise(resolve=>mock.listeners.onMessage[0]({cmd:"setSiteMode",mode:"selected"},
+    {id:mock.chrome.runtime.id,url:`chrome-extension://${mock.chrome.runtime.id}/options.html`},resolve));
+  assert.equal(result.ok,false);
+  assert.equal(mock.grantedPermissions.has("*://*/*"),false);
+  assert.equal(port.sitePolicyPending,false);
+  assert.equal(sandbox.SolstoneHosts.originGranted(port,"https://one.example"),false);
+});
+
+test("all-sites mode preserves selected intent, retains its grant and registers exact exclusions", async () => {
+  const mock=createMockChrome();
+  mock.storageData.cfg={chosenOrigins:["https://one.example"],paused:false,showPageIndicator:false};
+  mock.grantedPermissions.add("*://one.example/*");
+  const sandbox=createSandbox(mock,true);
+  vm.runInNewContext(readExtFile("background.js"),sandbox);
+  const port=await sandbox.SolstoneBackground.ensureInit();
+  port.consentVersion=1;
+  const send=msg=>new Promise(resolve=>mock.listeners.onMessage[0](msg,
+    {id:mock.chrome.runtime.id,url:`chrome-extension://${mock.chrome.runtime.id}/options.html`},resolve));
+  assert.equal((await send({cmd:"setSiteMode",mode:"all",agreed:false})).error,"missing_consent");
+  await send({cmd:"intendAllSites"});
+  mock.grantedPermissions.add("*://*/*");
+  await Promise.all(mock.listeners.onAddedPerm.map(fn=>fn({origins:["*://*/*"]})));
+  assert.equal((await send({cmd:"setSiteMode",mode:"all",agreed:true})).ok,true);
+  await sandbox.SolstoneBackground.runReconcile();
+  assert.equal(mock.grantedPermissions.has("*://*/*"),true);
+  assert.deepEqual(Array.from(port.chosenOrigins),["https://one.example"]);
+  assert.ok(mock.registeredScripts.has("cs-all-sites"));
+  assert.equal((await send({cmd:"setExcludedHost",host:"https://private.example:8443/path",excluded:true})).ok,true);
+  assert.equal(sandbox.SolstoneHosts.originGranted(port,"https://private.example"),false);
+  assert.equal(sandbox.SolstoneHosts.originGranted(port,"https://new.example"),true);
+  assert.deepEqual(Array.from(mock.registeredScripts.get("cs-all-sites").excludeMatches),["*://private.example/*"]);
+  assert.equal((await send({cmd:"setSiteMode",mode:"selected"})).ok,true);
+  assert.equal(mock.registeredScripts.has("cs-all-sites"),false);
+  assert.equal(mock.grantedPermissions.has("*://*/*"),false);
+  assert.deepEqual(Array.from(port.chosenOrigins),["https://one.example"]);
+  assert.deepEqual(Array.from(mock.storageData.cfg.excludedHosts),["private.example"]);
+  assert.equal(sandbox.SolstoneHosts.originGranted(port,"https://new.example"),false);
+});
+
+test("a failed all-sites policy save cannot expand authorization", async () => {
+  const mock=createMockChrome();const sandbox=createSandbox(mock,true);
+  vm.runInNewContext(readExtFile("background.js"),sandbox);
+  const port=await sandbox.SolstoneBackground.ensureInit();port.consentVersion=1;
+  const send=msg=>new Promise(resolve=>mock.listeners.onMessage[0](msg,
+    {id:mock.chrome.runtime.id,url:`chrome-extension://${mock.chrome.runtime.id}/options.html`},resolve));
+  await send({cmd:"intendAllSites"});mock.grantedPermissions.add("*://*/*");
+  const set=mock.chrome.storage.local.set;
+  mock.chrome.storage.local.set=async()=>{throw new Error("disk failed");};
+  assert.equal((await send({cmd:"setSiteMode",mode:"all",agreed:true})).error,"storage_error");
+  mock.chrome.storage.local.set=set;
+  assert.equal(port.siteMode,"selected");
+  assert.equal(sandbox.SolstoneHosts.originGranted(port,"https://new.example"),false);
+  assert.notEqual(mock.storageData.cfg.siteMode,"all");
+});
+
+test("a broad grant arriving during mode persistence stays reserved and unread until the save finishes", async () => {
+  const mock=createMockChrome();const sandbox=createSandbox(mock,true);
+  vm.runInNewContext(readExtFile("background.js"),sandbox);
+  const port=await sandbox.SolstoneBackground.ensureInit();port.consentVersion=1;
+  const send=msg=>new Promise(resolve=>mock.listeners.onMessage[0](msg,
+    {id:mock.chrome.runtime.id,url:`chrome-extension://${mock.chrome.runtime.id}/options.html`},resolve));
+  await send({cmd:"intendAllSites"});
+  let release;const saved=new Promise(resolve=>release=resolve);const set=mock.chrome.storage.local.set;
+  mock.chrome.storage.local.set=async obj=>{await saved;return set(obj);};
+  const changing=send({cmd:"setSiteMode",mode:"all",agreed:true});
+  await new Promise(resolve=>setImmediate(resolve));
+  mock.grantedPermissions.add("*://*/*");
+  await Promise.all(mock.listeners.onAddedPerm.map(fn=>fn({origins:["*://*/*"]})));
+  await sandbox.SolstoneBackground.runReconcile();
+  assert.equal(mock.grantedPermissions.has("*://*/*"),true);
+  assert.equal(sandbox.SolstoneHosts.originGranted(port,"https://new.example"),false);
+  release();assert.equal((await changing).ok,true);
+  assert.equal(sandbox.SolstoneHosts.originGranted(port,"https://new.example"),true);
+  mock.grantedPermissions.delete("*://*/*");
+  await Promise.all(mock.listeners.onRemovedPerm.map(fn=>fn({origins:["*://*/*"]})));
+  assert.equal(port.siteMode,"all");
+  assert.equal(sandbox.SolstoneHosts.originGranted(port,"https://new.example"),false);
 });
 
 test("lifecycle: status onConnect rejects content sender and serves trusted extension page", async () => {
@@ -1051,6 +1199,7 @@ function contentHarness(Gate) {
     },
     SolstoneIndicator: { show() {}, remove() {} },
   };
+  vm.runInNewContext(fs.readFileSync(ROOT + "/extension/lib/hosts.js", "utf8"), ctx);
   vm.runInNewContext(
     fs.readFileSync(ROOT + "/extension/content.js", "utf8"),
     ctx,

@@ -151,6 +151,7 @@ test("the options binder drives Welcome mode, disclosure agreement, and Settings
   const originalTimeout = globalThis.setTimeout;
   globalThis.setTimeout = fn => { reconnects.push(fn); return reconnects.length; };
   t.after(() => { globalThis.setTimeout = originalTimeout; });
+  globalThis.window = { addEventListener() {} };
   const ids = [
     "pageHeader", "pageTitle", "pageSubTitle", "welcomeView", "settingsView",
     "warmCard", "warmKinship0", "warmKinship1", "warmKinship2", "stepsCard",
@@ -159,7 +160,7 @@ test("the options binder drives Welcome mode, disclosure agreement, and Settings
     "step2PendingText", "step2Actions", "agreeDisclosureBtn", "step2Completed", "step2ReReadDetails", "step2ReadAgain", "step2ReReadBody",
     "step3Section", "step3HeadingRow", "step3Check", "step3Heading", "step3Content", "step3Body", "welcomeShowPageIndicator", "welcomeSiteList",
     "statusCard", "statusLead", "statusStateChip", "statusReason", "sitesCard",
-    "statusAlso", "statusActions",
+    "statusAlso", "statusActions", "sitesHeading", "siteInputLabel", "siteModeHelp", "allSitesAccess", "selectedSitesMode", "allSitesMode",
     "sitesMain", "addForm", "newHost", "addBtn", "siteList", "siteDisclosure",
     "siteDisclosureTitle", "siteDisclosureWhat", "siteDisclosureUnsent", "siteDisclosureDestination",
     "siteDisclosureDestinationDetail", "siteDisclosureChrome", "siteDisclosureConfirm",
@@ -303,7 +304,9 @@ test("the options binder drives Welcome mode, disclosure agreement, and Settings
   // 6. acknowledgeDisclosure returning { ok: true } reveals read it again with DISCLOSURE_BODY
   ackResponse = { ok: true, consentVersion: 1 };
   await nodes.agreeDisclosureBtn.listeners.click();
-  assert.equal(nodes.step2Completed.hidden, false);
+  assert.equal(nodes.welcomeView.hidden, true);
+  assert.equal(nodes.settingsView.hidden, false);
+  assert.equal(nodes.selectedSitesMode.checked, true);
   assert.equal(nodes.step2ReReadBody.textContent, C.DISCLOSURE_BODY.replace(/^- /gm, "").replaceAll("\n", ""));
 
   // 7. Step 1 with custody.full, hostCapture: "permitted", and lossNotice shows full-store headline and not dropped reason

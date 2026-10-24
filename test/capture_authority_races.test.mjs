@@ -5,6 +5,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 import assert from "node:assert/strict";
 import test from "node:test";
+await import(new URL("../extension/lib/hosts.js", import.meta.url));
 import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("..", import.meta.url));
 await import(root + "/node_modules/fake-indexeddb/auto/index.mjs");
@@ -43,6 +44,7 @@ function harness() {
   const requests = [],
     intervals = new Map(),
     sent = [];
+  let readReply;
   let id = 0;
   const ctx = {
     crypto,
@@ -63,7 +65,7 @@ function harness() {
         id: "ext",
         sendMessage(m, cb) {
           if (m.kind === "hello") requests.push(cb);
-          else sent.push(m);
+          else { sent.push(m); if (m.kind === "read") readReply = cb; }
         },
         onMessage: {
           addListener(fn) {
@@ -88,6 +90,7 @@ function harness() {
       disconnect() {}
     },
     SolstoneCaptureGate: globalThis.SolstoneCaptureGate,
+    SolstoneHosts: globalThis.SolstoneHosts,
     SolstoneAdapters: {
       adapterForHost() {
         return { name: "generic" };
@@ -111,6 +114,8 @@ function harness() {
   return {
     requests,
     sent,
+    executeRead(read) { return ctx.__solstoneAuthorizedRead(read.realmToken, read.documentKey, read); },
+    finishRead() { readReply?.({ok:true}); },
     setTime(x) {
       t = x;
     },
@@ -125,6 +130,31 @@ function harness() {
     },
   };
 }
+
+test("content: all-mode listeners schedule reads without walking a denied document", () => {
+  const h = harness();
+  h.requests[0]({...grant,siteMode:"all",allSitesConsent:1,broadGranted:true,grantedOrigins:[],captureEpoch:1});
+  h.tick();
+  const read = h.sent.find(msg => msg.kind === "read");
+  assert.ok(read);
+  assert.equal(h.reads,0);
+  assert.equal(h.executeRead({...read,nonce:"browser-approved"}),true);
+  assert.ok(h.reads>0);
+  assert.equal(h.sent.find(msg => msg.kind === "skim").readNonce,"browser-approved");
+  h.finishRead();
+});
+
+test("content: timed-out and withdrawn browser executions cannot begin a later DOM walk", () => {
+  for (const withdraw of [h=>h.setTime(5001),h=>h.msg({kind:"permissionRemoved"})]) {
+    const h=harness();
+    h.requests[0]({...grant,siteMode:"all",allSitesConsent:1,broadGranted:true,grantedOrigins:[],captureEpoch:1});
+    h.tick();
+    const read=h.sent.find(msg=>msg.kind==="read");
+    assert.ok(read);withdraw(h);
+    assert.equal(h.executeRead({...read,nonce:"late"}),false);
+    assert.equal(h.reads,0);
+  }
+});
 
 test("content: current reply captures but expired or pre-stop replies never read DOM", () => {
   let h = harness();

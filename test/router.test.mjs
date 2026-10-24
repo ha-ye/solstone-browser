@@ -36,6 +36,7 @@ const confirmRealm = async () => true; // This suite supplies a live-frame confi
 const EXT_ID = "fgfnkcefedeheoeamppkiiloncfekakf";
 
 async function resetDB() {
+  Router.frameBindings.clear();
   await DB.clear("outbox");
   await DB.clear("producer");
   await DB.clear("meta");
@@ -65,6 +66,66 @@ function makePort() {
   };
   return p;
 }
+
+test("all-sites admits a new origin only with agreement and browser grant; excluded frames stay closed", async () => {
+  await resetDB();
+  const port = makePort();
+  port.siteMode = "all"; port.broadGranted = true;
+  const sender = {id:EXT_ID,tab:{id:700},frameId:1,url:"https://new.example/path",origin:"https://new.example"};
+  const deps = {runtimeId:EXT_ID,port,confirmRealm};
+  const hello = {kind:"hello",realmToken:"all-realm"};
+  assert.equal((await Router.route(hello,sender,deps)).error,"origin_not_granted");
+  port.allSitesConsent = globalThis.SolstoneHosts.ALL_SITES_CONSENT_VERSION;
+  assert.equal((await Router.route(hello,sender,deps)).ok,true);
+  port.excludedHosts = ["new.example"]; port.notify();
+  assert.equal((await Router.route(hello,sender,deps)).error,"origin_not_granted");
+  port.excludedHosts = []; port.broadGranted = false; port.notify();
+  assert.equal((await Router.route(hello,sender,deps)).error,"origin_not_granted");
+  assert.deepEqual([...port.chosenOrigins],[]);
+});
+
+test("all-sites skims need a matching single-use browser execution token", async () => {
+  await resetDB();
+  const port = makePort();
+  Object.assign(port,{siteMode:"all",allSitesConsent:1,broadGranted:true});
+  const sender = {id:EXT_ID,tab:{id:701},frameId:0,url:"https://new.example/path",origin:"https://new.example"};
+  let read;
+  const deps = {runtimeId:EXT_ID,port,confirmRealm,executeBrowserRead:async (_binding,request,authorize)=>{
+    assert.equal(authorize(),true); read=request; return true;
+  }};
+  await Router.route({kind:"hello",realmToken:"one-use"},sender,deps);
+  const skim = {kind:"skim",realmToken:"one-use",captureEpoch:port.captureEpoch,
+    connectionGeneration:port.connectionGeneration,destinationGeneration:port.destinationGeneration,leaseToken:port.lease.token,
+    blocks:[{id:"1",type:"text",depth:0,text:"Synthetic all-sites page"}]};
+  assert.equal((await Router.route(skim,sender,deps)).error,"read_not_authorized");
+  assert.equal((await Router.route({kind:"read",action:"skim",requestId:1,realmToken:"one-use",
+    captureEpoch:port.captureEpoch,leaseToken:port.lease.token},sender,deps)).ok,true);
+  const admitted = await Router.route({...skim,readNonce:read.nonce},sender,deps);
+  assert.equal(admitted.ok,true);
+  assert.equal((await Router.route({...skim,readNonce:read.nonce},sender,deps)).error,"read_not_authorized");
+  assert.ok(await Outbox.getHead());
+});
+
+test("all-sites browser denial and late policy/permission callbacks cannot admit a skim", async () => {
+  await resetDB();
+  const port = makePort(); Object.assign(port,{siteMode:"all",allSitesConsent:1,broadGranted:true});
+  const sender = {id:EXT_ID,tab:{id:702},frameId:0,url:"https://new.example/path",origin:"https://new.example"};
+  const deps = {runtimeId:EXT_ID,port,confirmRealm,executeBrowserRead:async()=>{throw new Error("browser denied");}};
+  await Router.route({kind:"hello",realmToken:"denied"},sender,deps);
+  const request = {kind:"read",action:"skim",requestId:1,realmToken:"denied",captureEpoch:port.captureEpoch,leaseToken:port.lease.token};
+  assert.equal((await Router.route(request,sender,deps)).error,"browser_access_denied");
+  assert.equal(port.browserDeniedOrigins.has(sender.origin),true);
+  for (const withdraw of [()=>{port.excludedHosts=["new.example"];},()=>{port.permissionEpoch++;}]) {
+    port.excludedHosts=[]; port.notify();
+    let resolve;
+    deps.executeBrowserRead=()=>new Promise(r=>resolve=r);
+    const pending=Router.route({...request,captureEpoch:port.captureEpoch},sender,deps);
+    await new Promise(r=>setImmediate(r));
+    withdraw();port.notify();resolve(true);
+    assert.equal((await pending).error,"authority_mismatch");
+  }
+  assert.equal(await Outbox.getHead(),null);
+});
 
 test("router: rejects sender with non-matching extension id", async () => {
   await resetDB();

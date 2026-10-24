@@ -10,6 +10,27 @@ import assert from "node:assert/strict";
 await import(new URL("../extension/lib/hosts.js", import.meta.url));
 const H = globalThis.SolstoneHosts;
 
+test("all-sites requires explicit scope agreement and live broad access, with exact-host exclusions", () => {
+  const state = {siteMode:"all", allSitesConsent:H.ALL_SITES_CONSENT_VERSION, broadGranted:true,
+    excludedHosts:["example.com"], chosenOrigins:[], grantedOrigins:[]};
+  assert.equal(H.originGranted(state, "https://new.example"), true);
+  assert.equal(H.originGranted(state, "https://example.com:8443/path"), false);
+  assert.equal(H.originGranted(state, "http://example.com"), false);
+  assert.equal(H.originGranted(state, "https://mail.example.com"), true);
+  for (const patch of [{allSitesConsent:0},{broadGranted:false},{sitePolicyPending:true}]) {
+    assert.equal(H.originGranted({...state,...patch}, "https://new.example"), false);
+  }
+  for (const origin of ["file:///tmp/a", "chrome://settings", "about:blank", "not a URL"]) {
+    assert.equal(H.originGranted(state, origin), false);
+  }
+  assert.equal(H.excludedHostname("https://EXAMPLE.com:8443/path"), "example.com");
+  assert.equal(H.excludedHostname("*.example.com"), null);
+  assert.equal(H.excludedHostname("https://person:secret@example.com"), null);
+  const selected = {...state,siteMode:"selected",grantedOrigins:["https://chosen.example"]};
+  assert.equal(H.originGranted(selected, "https://new.example"), false);
+  assert.equal(H.originGranted(selected, "https://chosen.example"), true);
+});
+
 test("splitHost separates a trailing numeric port", () => {
   assert.deepEqual(H.splitHost("localhost:5015"), { hostname: "localhost", port: "5015" });
   assert.deepEqual(H.splitHost("127.0.0.1:8080"), { hostname: "127.0.0.1", port: "8080" });

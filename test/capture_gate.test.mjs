@@ -20,6 +20,7 @@ await import(new URL("../extension/lib/native_outbox.js", import.meta.url));
 
 const DB = globalThis.SolstoneDB;
 const Outbox = globalThis.SolstoneNativeOutbox;
+await import(new URL("../extension/lib/hosts.js", import.meta.url));
 const Gate = globalThis.SolstoneCaptureGate;
 
 async function resetDB() {
@@ -289,6 +290,7 @@ test("gate: deferred callbacks stay closed", async () => {
     SolstoneSkim: fakeSkim,
     SolstoneIndicator: fakeIndicator,
     SolstoneCaptureGate: Gate,
+    SolstoneHosts: globalThis.SolstoneHosts,
     SolstoneNativeBrowserConstants: globalThis.SolstoneNativeBrowserConstants,
     SolstoneNativeBrowser: globalThis.SolstoneNativeBrowser,
   };
@@ -395,6 +397,7 @@ test("gate: withdrawal closes a scheduled hello while getAll is pending", async 
       SolstoneSkim: {skim:() => [{id:"1",type:"text",depth:0,text:"Inbox"}]},
       SolstoneIndicator: {show(){}, remove(){}},
       SolstoneCaptureGate: Gate,
+    SolstoneHosts: globalThis.SolstoneHosts,
     };
     sandbox.globalThis = sandbox;
     const contentCode = fs.readFileSync(new URL("../extension/content.js", import.meta.url), "utf-8");
@@ -532,6 +535,7 @@ test("gate: solicited response after grantRequestMono + freshnessMs does not cal
     SolstoneSkim: fakeSkim,
     SolstoneIndicator: { show: () => {}, remove: () => {} },
     SolstoneCaptureGate: Gate,
+    SolstoneHosts: globalThis.SolstoneHosts,
     SolstoneNativeBrowserConstants: globalThis.SolstoneNativeBrowserConstants,
     SolstoneNativeBrowser: globalThis.SolstoneNativeBrowser,
   };
@@ -592,6 +596,7 @@ test("gate: resnapshot message makes 0 discover/skim calls when closed, 1 when o
     SolstoneSkim: fakeSkim,
     SolstoneIndicator: { show: () => {}, remove: () => {} },
     SolstoneCaptureGate: Gate,
+    SolstoneHosts: globalThis.SolstoneHosts,
     SolstoneNativeBrowserConstants: globalThis.SolstoneNativeBrowserConstants,
     SolstoneNativeBrowser: globalThis.SolstoneNativeBrowser,
   };

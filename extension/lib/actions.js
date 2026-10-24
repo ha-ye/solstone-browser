@@ -46,6 +46,12 @@
       await refresh();
       return true;
     }
+    if (action.id === "exclude-site" || action.id === "include-site") {
+      const result = await cmd({ cmd: "setExcludedHost", host: action.host || action.origin, excluded: action.id === "exclude-site" });
+      if (result?.error) effects.showError(result.error);
+      await refresh();
+      return true;
+    }
     return false;
   }
 

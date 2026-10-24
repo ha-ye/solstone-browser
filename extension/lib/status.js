@@ -220,7 +220,20 @@
         });
       }
 
-      if (chosenOrigins.length === 0) {
+      if (status.sitePolicyPending) {
+        items.push({ layer: 3, kind: "site-policy-pending", mark: "paused", badge: "", headline: "changing your sites",
+          sub: "nothing new is taken in until this is saved", reason: "", action: null, connecting: null });
+      } else if (status.siteMode === "all" && (status.allSitesConsent !== globalThis.SolstoneHosts.ALL_SITES_CONSENT_VERSION || status.broadGranted !== true)) {
+        items.push({ layer: 3, kind: "all-sites-access", mark: "paused", badge: "", headline: "allow access in your browser",
+          sub: "nothing new is taken in from this browser",
+          reason: status.brand === "safari"
+            ? "in Safari settings, choose websites, then solstone. set for other websites to allow."
+            : `${bName} hasn't allowed access to all sites. open settings to allow it.`,
+          action: { id: "open-settings", label: "open settings" }, connecting: null });
+      } else if (status.siteMode === "all" && status.allSitesRegistration === "failed") {
+        items.push({ layer: 3, kind: "all-sites-registration", mark: "attention", badge: "!", headline: "couldn't start on your sites",
+          sub: "", reason: "open settings to try allowing access again.", action: { id: "open-settings", label: "open settings" }, connecting: null });
+      } else if (status.siteMode !== "all" && chosenOrigins.length === 0) {
         items.push({
           layer: 3,
           kind: "no-sites",
@@ -531,8 +544,14 @@
     const openTabOrigins = Array.isArray(extras.openTabOrigins) ? extras.openTabOrigins :
       (Array.isArray(tabs.openOrigins) ? tabs.openOrigins : []);
     const tabsKnown = typeof extras.tabsKnown === "boolean" ? extras.tabsKnown : tabs.known === true;
-    const isInactive = inactiveOrigins.includes(entry);
-    const isGranted = grantedOrigins.includes(entry);
+    let host = "";
+    try { host = new URL(entry).hostname; } catch (_e) {}
+    if (status.siteMode === "all" && (status.excludedHosts || []).includes(host)) {
+      return { kind: "excluded", label: "left out", action: null };
+    }
+    const isInactive = inactiveOrigins.includes(entry) || (status.siteMode === "all" &&
+      (!status.broadGranted || (status.browserDeniedOrigins || []).includes(entry)));
+    const isGranted = status.siteMode === "all" ? globalThis.SolstoneHosts.originGranted(status, entry) : grantedOrigins.includes(entry);
     const isTabOpen = openTabOrigins.includes(entry);
 
     if (registration === "failed" || enqueueError) {
@@ -594,8 +613,9 @@
       } catch (_e) {}
     }
     const openOrigins = Array.from(origins).sort();
-    const grants = new Set(Array.isArray(options.grantedOrigins) ? options.grantedOrigins : []);
-    return { known: true, openOrigins, anyGrantedTabOpen: openOrigins.some((origin) => grants.has(origin)) };
+    const grants = new Set(options.grantedOrigins || []);
+    return { known: true, openOrigins, anyGrantedTabOpen: openOrigins.some((origin) =>
+      options.siteMode === "all" ? globalThis.SolstoneHosts.originGranted(options, origin) : grants.has(origin)) };
   }
 
   function welcomeHold(status) {

@@ -30,13 +30,13 @@
     "your journal is always private, only yours.",
   ];
 
-  const DISCLOSURE_BODY = `you choose which sites to share. on a site you add, the solstone extension takes in the page's text and rough layout whenever a tab is open, and all of it goes into your journal:
+  const DISCLOSURE_BODY = `you choose which sites to share. by default, you add sites one at a time. you can also choose all sites after a separate agreement and leave sites out. on the sites you choose, the solstone extension takes in the page's text and rough layout whenever a tab is open, and all of it goes into your journal:
 - the text you can see, the text you'd see by scrolling, text in background tabs, some labels pages provide for screen readers and tooltips, and text the page has but doesn't show you
 - each page's address, without anything after a ? or #, its title, when you were on it, and the sites its links point to
-- on a mail or chat site you add, your messages
+- on a mail or chat site you choose, your messages
 - some words you've typed but haven't sent, and anything a site shows, even something you'd consider secret, like a code in an email
 
-never pixels. never raw HTML. never a site you didn't add.
+never pixels. never raw HTML. sites you leave out aren't taken in.
 
 where it goes: nothing leaves this browser except to the solstone app on this computer. from there it goes into your journal over the link the solstone app already uses.
 
@@ -50,6 +50,20 @@ no analytics. no telemetry. no phone home. nobody counted.`;
   const STEP1_NOT_PAIRED_BODY = "pair the solstone app on this computer with your journal. this page moves on by itself once it is.";
   const STEP1_INTAKE_OFF_BODY = "turn them on under sources in the solstone app's settings. this page moves on by itself.";
   const TRUNCATION_ATTENTION = "part of what you shared on this site was too long to keep";
+
+  function allSitesCopy(brand) {
+    return {
+      title: "share all sites?",
+      what: "on every website your browser allows, including sites you visit later, the solstone extension takes in the page's text, address and rough layout whenever a tab is open, and all of it goes into your journal. this includes background tabs and text the page has but doesn't show you.",
+      unsent: "that includes messages on mail and chat sites, words you've typed into a page's editor but haven't sent, and anything a site shows, even something you'd consider secret. you can leave sites out at any time. private windows are still left out.",
+      destination: "your journal, through the solstone app on this computer",
+      destinationDetail: "nothing leaves this browser except to the solstone app on this computer.",
+      browser: brand === "safari"
+        ? "in Safari settings, choose websites, then solstone. set for other websites to allow. your browser can still refuse individual sites."
+        : `${browserName(brand)} will ask you to allow access to all websites. your browser can still limit access.`,
+      confirmLabel: "agree and choose all sites", cancelLabel: "cancel",
+    };
+  }
 
   function step3Body(brand) {
     return `open a site you want to share, open solstone from your browser's toolbar or extensions menu, and choose add this site. ${browserName(brand)} will ask you to allow it.`;
@@ -104,6 +118,7 @@ no analytics. no telemetry. no phone home. nobody counted.`;
     browserName,
     WARM_CARD,
     DISCLOSURE_BODY,
+    allSitesCopy,
     STEP1_CANT_REACH_BODY,
     STEP1_NOT_PAIRED_BODY,
     STEP1_INTAKE_OFF_BODY,

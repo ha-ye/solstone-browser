@@ -2,7 +2,7 @@
 
 Development source for the browser extension that connects to the solstone app on the same computer through native messaging.
 
-The solstone app takes in what you share with it, and all of it goes into your journal. In this extension, you choose sites and agree to the disclosure before any page reading begins. A compatible running app must also authorize it. The extension sends page material only through the native connection; the app owns delivery to your journal.
+The solstone app takes in what you share with it, and all of it goes into your journal. in this extension, you add sites individually by default. you can choose all sites after a separate agreement and leave individual sites out. your browser's permissions and a compatible running app must also allow each page reading. The extension sends page material only through the native connection; the app owns delivery to your journal.
 
 The browser targets are desktop Chrome, Edge and Firefox, and Safari on macOS, where the extension ships inside the solstone app. Building the extension does not install the app or its native helper. Use an isolated development profile and a matching development host for integration work.
 

@@ -6,6 +6,10 @@ Notable changes to the extension. The version is `manifest.json`'s `version`;
 
 ## [Unreleased]
 
+### Added
+
+- choose all sites in the extension's settings, with a separate agreement and sites you can leave out. sites you add one at a time remain the default, and your list returns when you switch back. Safari uses its own website settings to allow access.
+
 ## [0.3.0] (2026-10-13)
 
 ### Added

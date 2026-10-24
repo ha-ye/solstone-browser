@@ -29,7 +29,8 @@
       ? state.allowlist
       : [];
 
-    const siteRows = chosenOrigins.map((entry) => {
+    const allSites = state.siteMode === "all";
+    const siteRows = (allSites ? [] : chosenOrigins).map((entry) => {
       let host = entry;
       try {
         if (entry.startsWith("http")) host = new URL(entry).hostname;
@@ -87,6 +88,10 @@
     if (!page.ok) {
       pageState = "this page can't be added";
       siteAction = { id: "add-site", label: "add this site", disabled: true, primary: true };
+    } else if (allSites) {
+      const excluded = (state.excludedHosts || []).includes(page.host);
+      pageState = globalThis.SolstoneStatus.siteRow(page.origin, state, extras).label;
+      siteAction = { id: excluded ? "include-site" : "exclude-site", label: excluded ? "include this site" : "leave this site out", disabled: false, primary: false };
     } else if (!isPageChosen) {
       pageState = "not added";
       const canAdd = state.addSiteEligible === true && state.consentVersion === 1;
@@ -124,13 +129,14 @@
       host: page.host || "this page",
       state: pageState,
       siteAction,
-      pauseAction: chosenOrigins.length === 0 && !state.paused ? null : {
+      pauseAction: !allSites && chosenOrigins.length === 0 && !state.paused ? null : {
         id: "set-paused",
         label: state.paused ? "resume" : "pause all",
         primary: !!state.paused,
       },
     });
-    if (siteRows.length > 0) sections.push({ id: "siteCount", text: siteCountLine(siteRows) });
+    if (allSites) sections.push({ id: "siteCount", text: `all sites mode \u00b7 ${(state.excludedHosts || []).length} left out` });
+    else if (siteRows.length > 0) sections.push({ id: "siteCount", text: siteCountLine(siteRows) });
     sections.push({ id: "footer" });
     return sections;
   }
@@ -205,5 +211,18 @@
     return grantSite(host, effects);
   }
 
-  globalThis.SolstonePopupView = { arrange, siteCountLine, grantSite, addSite };
+  async function grantAllSites(effects) {
+    if (effects.status?.consentVersion !== 1) return { ok: false, error: "missing_consent" };
+    // Request synchronously from the confirming owner gesture.
+    effects.cmd({ cmd: "intendAllSites" });
+    let granted = false;
+    try { granted = await effects.requestPermission({ origins: ["*://*/*"] }); } catch (_e) {}
+    if (!granted && effects.status.brand !== "safari") {
+      await effects.cmd({ cmd: "clearAddIntent" });
+      return { ok: false, denied: true };
+    }
+    return effects.cmd({ cmd: "setSiteMode", mode: "all", agreed: true });
+  }
+
+  globalThis.SolstonePopupView = { arrange, siteCountLine, grantSite, addSite, grantAllSites };
 })();

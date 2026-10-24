@@ -80,7 +80,7 @@
         background: #fff;
         color: var(--ink);
       }
-      input[type="checkbox"] { width: auto; }
+      input[type="checkbox"], input[type="radio"] { width: auto; }
       button {
         min-height: 34px;
         font: inherit;
@@ -253,12 +253,19 @@
         </section>
 
         <section id="sitesCard" class="card">
-          <h2>your sites</h2>
+          <h2 id="sitesHeading">your sites</h2>
           <div id="sitesMain">
+            <fieldset style="margin: 0 0 16px; padding: 12px; border: 1px solid var(--line);">
+              <legend>sites to share</legend>
+              <label class="marker-label"><input type="radio" name="siteMode" id="selectedSitesMode" value="selected" checked /> sites you add</label>
+              <label class="marker-label"><input type="radio" name="siteMode" id="allSitesMode" value="all" /> all sites</label>
+            </fieldset>
+            <p id="siteModeHelp" class="muted"></p>
+            <button id="allSitesAccess" type="button" hidden>allow access to all sites</button>
             <form id="addForm" novalidate>
               <div class="addrow">
                 <div>
-                  <label for="newHost">add this site</label>
+                  <label id="siteInputLabel" for="newHost">add this site</label>
                   <input id="newHost" placeholder="mail.google.com" />
                 </div>
                 <button id="addBtn" class="primary" type="submit">add this site</button>
@@ -287,7 +294,7 @@
           <h2>on-page marker</h2>
           <label class="marker-label">
             <input type="checkbox" id="showPageIndicator" />
-            show a small solstone mark on pages you've added
+            show a small solstone mark on pages you share
           </label>
         </section>
 

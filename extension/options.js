@@ -40,6 +40,7 @@
 
   let state = null;
   let disclosureResolve = null;
+  let allSitesDisclosure = false;
   let step1Action = null;
   let paintSequence = 0;
   let appliedCaptureEpoch = -1;
@@ -89,8 +90,9 @@
     resolve(confirmed);
   }
 
-  function presentDisclosure(host) {
-    const copy = Disclosure.addSite(host, state);
+  function presentDisclosure(host, allSites = false) {
+    allSitesDisclosure = allSites;
+    const copy = allSites ? Copy.allSitesCopy(state?.brand) : Disclosure.addSite(host, state);
     if ($("siteDisclosureTitle")) $("siteDisclosureTitle").textContent = copy.title;
     if ($("siteDisclosureWhat")) $("siteDisclosureWhat").textContent = copy.what;
     if ($("siteDisclosureUnsent")) $("siteDisclosureUnsent").textContent = copy.unsent;
@@ -112,6 +114,15 @@
   async function addSiteFromInput(inputElement) {
     clearAnnouncement();
     const raw = inputElement ? inputElement.value : "";
+    if (state?.siteMode === "all") {
+      const host = Hosts.excludedHostname(raw.trim());
+      if (!host) { announce("enter a website address.", "bad"); return; }
+      const result = await cmd({ cmd: "setExcludedHost", host, excluded: true });
+      if (result.error) showActionError(result.error);
+      else { inputElement.value = ""; announce(`${host} left out.`, "ok"); }
+      await refresh();
+      return;
+    }
     if (!Hosts.isValidHostInput(raw)) {
       return;
     }
@@ -167,7 +178,8 @@
         if (entry.startsWith("http")) host = new URL(entry).hostname;
       } catch (_e) {}
 
-      const rowState = Status.siteRow(entry, state);
+      const excluded = state?.siteMode === "all";
+      const rowState = excluded ? { kind: "excluded", label: "left out" } : Status.siteRow(entry, state);
       const row = document.createElement("div");
       row.className = "site";
       const copyEl = document.createElement("div");
@@ -191,8 +203,8 @@
       }
       const remove = document.createElement("button");
       remove.type = "button";
-      remove.textContent = "remove";
-      remove.addEventListener("click", () => runSiteAction({ id: "remove-site", host, origin: entry }));
+      remove.textContent = excluded ? "include again" : "remove";
+      remove.addEventListener("click", () => runSiteAction({ id: excluded ? "include-site" : "remove-site", host, origin: entry }));
       actions.append(remove);
       row.append(copyEl, actions);
       list.append(row);
@@ -367,7 +379,18 @@
       : Array.isArray(state && state.grantedOrigins)
       ? state.grantedOrigins
       : [];
-    renderSiteRowsInto("siteList", allowlist);
+    const allSites = state?.siteMode === "all";
+    $("selectedSitesMode").checked = !allSites;
+    $("allSitesMode").checked = allSites;
+    $("sitesHeading").textContent = allSites ? "sites left out" : "your sites";
+    $("siteInputLabel").textContent = allSites ? "leave this site out" : "add this site";
+    $("addBtn").textContent = allSites ? "leave out" : "add this site";
+    $("siteModeHelp").textContent = allSites
+      ? "sites you visit later are included too. you can leave sites out below. subdomains are separate sites. your list of added sites returns when you switch back."
+      : "only sites you add are shared. your list stays here when you switch modes.";
+    $("allSitesAccess").hidden = !allSites || (state.broadGranted === true && state.allSitesRegistration !== "failed");
+    $("allSitesAccess").textContent = state?.brand === "safari" ? "check Safari access" : "allow access to all sites";
+    renderSiteRowsInto("siteList", allSites ? state.excludedHosts || [] : allowlist);
 
     // Indicator Section
     if ($("showPageIndicator")) $("showPageIndicator").checked = !!(state && state.showPageIndicator);
@@ -391,7 +414,7 @@
       ? state.grantedOrigins
       : [];
 
-    const isWelcome = (!state || state.consentVersion !== 1) || chosen.length === 0;
+    const isWelcome = !state || state.consentVersion !== 1;
 
     if (isWelcome) {
       renderWelcome(derived);
@@ -466,13 +489,48 @@
 
   // Site Disclosure confirmation
   if ($("siteDisclosureConfirm")) {
-    $("siteDisclosureConfirm").addEventListener("click", () => closeDisclosure(true));
+    $("siteDisclosureConfirm").addEventListener("click", () => {
+      if (allSitesDisclosure) {
+        // Invoke permission request in this actual confirming gesture.
+        const result = View.grantAllSites(siteEffects());
+        closeDisclosure(true);
+        result.then(async value => {
+          if (value.denied) announce("permission declined. your mode hasn't changed.", "bad");
+          else if (value.error) showActionError(value.error);
+          await refresh();
+        });
+      } else closeDisclosure(true);
+    });
   }
   if ($("siteDisclosureCancel")) {
     $("siteDisclosureCancel").addEventListener("click", () => closeDisclosure(false));
   }
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && $("siteDisclosure") && !$("siteDisclosure").hidden) closeDisclosure(false);
+  });
+
+  $("allSitesMode").addEventListener("change", async () => {
+    if (state?.siteMode === "all") return;
+    clearAnnouncement();
+    await presentDisclosure(null, true);
+    await refresh();
+  });
+  $("selectedSitesMode").addEventListener("change", async () => {
+    clearAnnouncement();
+    const result = await cmd({ cmd: "setSiteMode", mode: "selected" });
+    if (result.error) showActionError(result.error);
+    await refresh();
+  });
+  $("allSitesAccess").addEventListener("click", async () => {
+    const result = state?.brand === "safari"
+      ? await cmd({ cmd: "refreshSiteAccess" }) : await View.grantAllSites(siteEffects());
+    if (result.error) showActionError(result.error);
+    else if (result.denied) announce("permission declined. access is still paused.", "bad");
+    await refresh();
+  });
+  window.addEventListener("focus", async () => {
+    if (state?.siteMode === "all") await cmd({ cmd: "refreshSiteAccess" });
+    await refresh();
   });
 
   let subscriptionEpoch = 0;

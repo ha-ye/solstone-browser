@@ -153,6 +153,10 @@
 
   async function runPageSiteAction(action) {
     showActionMessage("");
+    if (action.id === "exclude-site" || action.id === "include-site") {
+      await runAction({ ...action, host: page.host, origin: page.origin });
+      return;
+    }
     if (action.id === "remove-site") {
       const origin = page.origin || `https://${page.host}`;
       const result = await cmd({ cmd: "removeGrantedOrigin", origin });
@@ -259,7 +263,7 @@
     const tab = await currentTab();
     if (sequence !== paintSequence) return;
     const current = tab && tab.url ? originFor(tab.url) : { origin: "", host: "", ok: false };
-    page = { origin: current.origin, host: current.host, ok: current.ok };
+    page = { origin: current.origin, host: current.host, ok: current.ok && tab?.incognito !== true };
     renderCurrent();
   }
 
