@@ -36,7 +36,7 @@
 - on a mail or chat site you choose, your messages
 - some words you've typed but haven't sent, and anything a site shows, even something you'd consider secret, like a code in an email
 
-never pixels. never raw HTML. sites you leave out aren't taken in.
+never pixels. never raw HTML. sites you leave out aren't taken in, but other sites shown inside those pages still are.
 
 where it goes: nothing leaves this browser except to the solstone app on this computer. from there it goes into your journal over the link the solstone app already uses.
 
@@ -87,7 +87,7 @@ no analytics. no telemetry. no phone home. nobody counted.`;
     chooseSelected: "switch to sites you add",
   };
 
-  const LEAVE_OUT_HELP = "a site you leave out isn't taken in, even inside another page. leave out each exact address, like mail.google.com: google.com and mail.google.com are separate sites.";
+  const LEAVE_OUT_HELP = "a site you leave out isn't taken in, even inside another page. other sites shown inside its pages are still shared, unless you leave them out too. leave out each exact address, like mail.google.com: google.com and mail.google.com are separate sites.";
 
   function keptNote(mode, count) {
     if (!(count > 0)) return "";
@@ -97,7 +97,7 @@ no analytics. no telemetry. no phone home. nobody counted.`;
   }
 
   function leftOutAnnouncement(host) {
-    return `${escapeToken(host)} left out. other subdomains are still shared.`;
+    return `${escapeToken(host)} left out. other subdomains, and other sites shown inside its pages, are still shared.`;
   }
 
   // What the settings page says about the browser's own grant in all-sites mode.
@@ -145,7 +145,7 @@ no analytics. no telemetry. no phone home. nobody counted.`;
       unknownNote: safari ? "if it's set to Deny in Safari's website settings, it isn't taken in." : "",
       deniedState: `${bName} is denying this site`,
       deniedNote: safari ? "to include it, set it to Allow in Safari's website settings." : "",
-      leaveOutNote: (host) => `leaving it out covers ${escapeToken(host)} only. each subdomain is its own site.`,
+      leaveOutNote: (host) => `leaving it out covers ${escapeToken(host)} only. other subdomains, and other sites shown inside its pages, are still shared.`,
     };
   }
 

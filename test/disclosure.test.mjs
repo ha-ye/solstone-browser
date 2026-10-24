@@ -38,3 +38,11 @@ test("disclosure helpers do not mutate caller state", () => {
     brand: "chrome",
   });
 });
+
+test("leave-out copy says other sites shown inside a left-out page are still shared", () => {
+  // Exclusions match each frame on its own address, so a frame from another site is still read.
+  assert.ok(C.DISCLOSURE_BODY.includes("other sites shown inside those pages still are"));
+  assert.ok(C.LEAVE_OUT_HELP.includes("other sites shown inside its pages are still shared"));
+  assert.ok(C.leftOutAnnouncement("mail.google.com").includes("other sites shown inside its pages"));
+  assert.ok(C.pageCopy("chrome").leaveOutNote("mail.google.com").includes("other sites shown inside its pages"));
+});
