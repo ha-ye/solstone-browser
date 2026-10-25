@@ -4,7 +4,7 @@ Notable changes to the extension. The version is `manifest.json`'s `version`;
 `make set-version` keeps `manifest.json` / `package.json` / `package-lock.json` /
 `background.js` in lockstep, and `make dist` refuses to build if they drift.
 
-## [Unreleased]
+## [0.4.0] (2026-10-25)
 
 ### Added
 
